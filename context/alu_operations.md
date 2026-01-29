@@ -94,31 +94,3 @@ These are bitwise operations performed parallelly on every bit position [0 to 31
 *   **XOR:** `Result = SrcA ^ SrcB` (Used to toggle bits or check for differences).
 
 
-## 6. Implementation Summary
-
-Below is the pseudo-code for the ALU Mux (Multiplexer) logic:
-
-```verilog
-always @(*) begin
-    Zero = (ALUResult == 0); // Always calculated based on result
-    
-    case (ALUControl)
-        ALU_ADD:  ALUResult = SrcA + SrcB;
-        ALU_SUB:  ALUResult = SrcA - SrcB;
-        ALU_AND:  ALUResult = SrcA & SrcB;
-        ALU_OR:   ALUResult = SrcA | SrcB;
-        ALU_XOR:  ALUResult = SrcA ^ SrcB;
-        ALU_SLL:  ALUResult = SrcA << SrcB[4:0];
-        ALU_SRL:  ALUResult = SrcA >> SrcB[4:0];
-        
-        // Arithmetic Shift: Cast to signed to force sign-extension in Verilog
-        ALU_SRA:  ALUResult = $signed(SrcA) >>> SrcB[4:0]; 
-        
-        // Comparisons return 32-bit value (0x00000001 or 0x00000000)
-        ALU_SLT:  ALUResult = ($signed(SrcA) < $signed(SrcB)) ? 32'd1 : 32'd0;
-        ALU_SLTU: ALUResult = (SrcA < SrcB) ? 32'd1 : 32'd0;
-        
-        default:  ALUResult = 32'b0;
-    endcase
-end
-```
