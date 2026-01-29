@@ -1,1 +1,32 @@
-/others
+# --- Vivado Junk ---
+*.jou
+*.log
+*.pb
+*.str
+.Xil/
+.cache/
+vivado_*.backup.*
+
+# --- Runtime specific files ---
+dfx_runtime.txt
+hd_visual/
+
+# --- Output Folders (Build) ---
+# We ignore where Vivado builds the project and bitstreams
+work/
+build/
+bin/
+
+# --- IPs (Optional) ---
+# If you want to ignore all IP contents except the .xci files, uncomment the following lines:
+# src/ip/*/*
+# !src/ip/*/*.xci
+
+# --- Hardware Manager ---
+*.hw
+*.ip_user_files/
+
+# --- VS Code & OS ---
+.vscode/
+.DS_Store
+Thumbs.db
