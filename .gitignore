@@ -30,3 +30,6 @@ bin/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# --- Custom ---
+/others
