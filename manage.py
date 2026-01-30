@@ -1,65 +1,66 @@
-import json
-import subprocess
-import sys
-import os
-
-def load_config():
-    """
-    Loads the configuration from config.json file.
-    """
-    with open('config.json', 'r') as f:
-        return json.load(f)
-
-def run_vivado(action):
-    """
-    Creates and runs the Vivado command based on the action provided.
-    Action can be 'build', 'sim', or 'program'.
-    """
-    config = load_config()
+import json, subprocess, sys
+class Log:
+    RESET, GREEN, YELLOW, RED, CYAN = '\033[0m', '\033[92m', '\033[93m', '\033[91m', '\033[96m'
+    LOG_SRC = "manage.py"
     
-    # Create logs directory if it doesn't exist
-    if not os.path.exists(config['directories']['build_logs']):
-        os.makedirs(config['directories']['build_logs'])
+    @staticmethod
+    def info(msg): print(f"{Log.CYAN}[INFO] @ {Log.LOG_SRC}: {msg}{Log.RESET}")
+    @staticmethod
+    def warn(msg): print(f"{Log.YELLOW}[WARN] @ {Log.LOG_SRC}: {msg}{Log.RESET}")
+    @staticmethod
+    def error(msg): print(f"{Log.RED}[ERROR] @ {Log.LOG_SRC}: {msg}{Log.RESET}")
 
-    # Define the TCL script to run based on action
-    script_map = {
-        "build": "scripts/build.tcl",
-        "sim": "scripts/sim.tcl",
-        "program": "scripts/program.tcl"
-    }
+def execute_vivado(script, module_name, mode):
+    """Lauches Vivado in batch mode with standardized arguments."""
+    with open('config.json', 'r') as f: 
+        cfg = json.load(f)
 
-    if action not in script_map:
-        print(f"Error: Action '{action}' not recognized. Use: build, sim, or program.")
-        return
-
-    tcl_script = script_map[action]
-    
-    # Build the command to run Vivado
-    # We use -tclargs to pass JSON data to the TCL script
-    command = [
-        config['vivado_path'],
-        "-mode", "batch",
-        "-notrace",
-        "-source", tcl_script,
-        "-log", f"{config['directories']['build_logs']}/vivado_{action}.log",
-        "-journal", f"{config['directories']['build_logs']}/vivado_{action}.jou",
-        "-tclargs", 
-        config['project_name'], 
-        config['part'], 
-        config['top_module'], 
-        config['tb_top']
+    # Arguments passed to TCL: [ProjectName] [Part] [TopModule] [Testbench] [Mode]
+    tcl_args = [
+        f"prj_{module_name}", 
+        cfg['part'], 
+        module_name, 
+        f"{module_name}_tb", 
+        mode
     ]
 
-    print(f"---> Running {action.upper()} for project {config['project_name']}...")
+    log_file = f"{cfg['directories']['build_logs']}/vivado_{module_name}_{mode}.log"
     
-    try:
-        subprocess.run(command, check=True)
-        print(f"---> {action.upper()} completed successfully.")
-    except subprocess.CalledProcessError:
-        print(f"---> ERROR in {action.upper()}. Check the logs in the /{config['directories']['build_logs']} folder.")
+    cmd = [
+        cfg['vivado_path'], "-mode", "batch", "-notrace",
+        "-source", f"scripts/{script}.tcl",
+        "-log", log_file,
+        "-tclargs", *tcl_args
+    ]
+
+    Log.info(f"Executing {script.upper()} | Module: {module_name} | Mode: {mode}")
+    return subprocess.run(cmd).returncode == 0
+
+def run_task(command, module):
+    """Maps CLI commands to TCL workflow sequences."""
+    tasks = {
+        "synth":    lambda: execute_vivado("build", module, "synth"),
+        "impl":     lambda: execute_vivado("build", module, "impl"),
+        "bit":      lambda: execute_vivado("build", module, "bitstream"),
+        "sim":      lambda: execute_vivado("sim", module, "synth"),
+        "program":  lambda: execute_vivado("program", module, "none"),
+    }
+
+    if command == "plugnplay": # Complete flow: synth -> impl -> bit -> program. Needs to run another task.
+        if execute_vivado("build", module, "bitstream"):
+            return execute_vivado("program", module, "none")
+        return False
+    
+    if command in tasks:
+        return tasks[command]()
+    
+    Log.error(f"Unknown command: {command}")
+    return False
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python manage.py [build|sim|program]")
-    else:
-        run_vivado(sys.argv[1])
+    if len(sys.argv) < 3:
+        Log.warn("Usage: python manage.py [synth|impl|bit|sim|program|plugnplay] [module_name]")
+        sys.exit(1)
+
+    success = run_task(sys.argv[1], sys.argv[2])
+    sys.exit(0 if success else 1)

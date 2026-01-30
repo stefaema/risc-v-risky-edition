@@ -2,8 +2,8 @@
     "vivado_path": "C:/Xilinx/2025.1/Vivado/bin/vivado.bat",
     "project_name": "riscv_risky_ed_project",
     "part": "xc7a35tcpg236-1",
-    "top_module": "top",
-    "tb_top": "top_tb",
+    "top_module": "ALU_cinate",
+    "tb_top": "ALU_cinate_tb",
     "directories": {
         "work": "work",
         "build_logs": "build"
