@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
-// Module: ALU-cinate
+// Module: alu
 // Description: 32-bit Arithmetic Logic Unit for RISC-V integer pipeline.
 //              Supports Arithmetic, Logical, Shift, and Comparison operations.
 // -----------------------------------------------------------------------------
 
-module ALU_cinate (
+module alu (
     input  logic [31:0] SrcA,       // Operand A (Rs1 or PC)
     input  logic [31:0] SrcB,       // Operand B (Rs2 or Imm)
     input  logic [3:0]  ALUControl, // Operation Selector
