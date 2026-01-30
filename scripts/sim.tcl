@@ -11,3 +11,5 @@ launch_simulation
 run all
 
 log_puts "success" "Simulation of $tb finished."
+close_sim
+exit
