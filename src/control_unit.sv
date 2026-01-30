@@ -11,7 +11,7 @@ module control_unit (
     // Execution Control
     output logic       branch_o,     // 1 = Conditional Branch (BEQ, BNE)
     output logic       jump_o,       // 1 = Unconditional Jump (JAL, JALR)
-    output logic [1:0] alu_op_o,     // 00=Add, 01=Sub, 10=R-Type, 11=I-Type
+    output logic [1:0] alu_opmode_o,     // 00=Add, 01=Sub, 10=R-Type, 11=I-Type
     output logic       alu_src_o,    // 0 = RegB, 1 = Immediate
 
     // Memory Control
@@ -48,18 +48,18 @@ module control_unit (
         reg_write_o  = 1'b0;
         mem_to_reg_o = 1'b0; 
         alu_src_o    = 1'b0; 
-        alu_op_o     = ALU_OP_ADD;
+        alu_opmode_o     = ALU_OP_ADD;
 
         case (opcode_i)
             OP_R_TYPE: begin
                 reg_write_o = 1'b1;
-                alu_op_o    = ALU_OP_RTY; // "Look at Funct3/7"
+                alu_opmode_o    = ALU_OP_RTY; // "Look at Funct3/7"
             end
 
             OP_I_TYPE: begin
                 reg_write_o = 1'b1;
                 alu_src_o   = 1'b1;  // Use Immediate
-                alu_op_o    = ALU_OP_ITY; // "Look at Funct3, Force Add if needed"
+                alu_opmode_o    = ALU_OP_ITY; // "Look at Funct3, Force Add if needed"
             end
 
             OP_LOAD: begin
@@ -67,38 +67,38 @@ module control_unit (
                 mem_read_o   = 1'b1;
                 mem_to_reg_o = 1'b1; // Select Memory Data
                 alu_src_o    = 1'b1; // Calculate Addr: Base + Imm
-                alu_op_o     = ALU_OP_ADD; // Force ADD
+                alu_opmode_o     = ALU_OP_ADD; // Force ADD
             end
 
             OP_STORE: begin
                 mem_write_o = 1'b1;
                 alu_src_o   = 1'b1; // Calculate Addr: Base + Imm
-                alu_op_o    = ALU_OP_ADD; // Force ADD
+                alu_opmode_o    = ALU_OP_ADD; // Force ADD
             end
 
             OP_BRANCH: begin
                 branch_o = 1'b1;
-                alu_op_o = ALU_OP_SUB; // Force SUB (Comparison)
+                alu_opmode_o = ALU_OP_SUB; // Force SUB (Comparison)
             end
 
             OP_JAL: begin
                 jump_o      = 1'b1;
                 reg_write_o = 1'b1;
                 alu_src_o   = 1'b1; 
-                alu_op_o    = ALU_OP_ADD; // Force ADD
+                alu_opmode_o    = ALU_OP_ADD; // Force ADD
             end
 
             OP_JALR: begin
                 jump_o      = 1'b1;
                 reg_write_o = 1'b1;
                 alu_src_o   = 1'b1; // Target = Rs1 + Imm
-                alu_op_o    = ALU_OP_ADD; // Force ADD
+                alu_opmode_o    = ALU_OP_ADD; // Force ADD
             end
 
             OP_LUI: begin
                 reg_write_o = 1'b1;
                 alu_src_o   = 1'b1;  // Pass Immediate
-                alu_op_o    = ALU_OP_ADD; // Force ADD
+                alu_opmode_o    = ALU_OP_ADD; // Force ADD
             end
 
             default: begin

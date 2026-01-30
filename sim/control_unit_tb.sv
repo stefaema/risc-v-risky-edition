@@ -6,7 +6,7 @@
 
 module control_unit_tb;
 
-    localparam string FILE_NAME = "Control Unit-y";
+    localparam string FILE_NAME = "CTRL+Unit";
     localparam string C_RESET   = "\033[0m";
     localparam string C_RED     = "\033[1;31m";
     localparam string C_GREEN   = "\033[1;32m";
@@ -17,7 +17,7 @@ module control_unit_tb;
     logic [6:0] opcode_i;
     logic       branch_o;
     logic       jump_o;
-    logic [1:0] alu_op_o;
+    logic [1:0] alu_opmode_o;
     logic       alu_src_o;
     logic       mem_read_o;
     logic       mem_write_o;
@@ -33,7 +33,7 @@ module control_unit_tb;
         .opcode_i     (opcode_i),
         .branch_o     (branch_o),
         .jump_o       (jump_o),
-        .alu_op_o     (alu_op_o),
+        .alu_opmode_o     (alu_opmode_o),
         .alu_src_o    (alu_src_o),
         .mem_read_o   (mem_read_o),
         .mem_write_o  (mem_write_o),
@@ -135,7 +135,7 @@ module control_unit_tb;
         // Compare all signals
         if (branch_o     !== exp_branch)     mismatch = 1;
         if (jump_o       !== exp_jump)       mismatch = 1;
-        if (alu_op_o     !== exp_alu_op)     mismatch = 1;
+        if (alu_opmode_o     !== exp_alu_op)     mismatch = 1;
         if (alu_src_o    !== exp_alu_src)    mismatch = 1;
         if (mem_read_o   !== exp_mem_read)   mismatch = 1;
         if (mem_write_o  !== exp_mem_write)  mismatch = 1;
@@ -147,7 +147,7 @@ module control_unit_tb;
             $display("%s[FAIL] %-10s %s | Exp: {Br:%b Jmp:%b AOp:%b ASrc:%b MR:%b MW:%b RW:%b M2R:%b} | Got: {Br:%b Jmp:%b AOp:%b ASrc:%b MR:%b MW:%b RW:%b M2R:%b}", 
                 C_RED, name, C_RESET,
                 exp_branch, exp_jump, exp_alu_op, exp_alu_src, exp_mem_read, exp_mem_write, exp_reg_write, exp_mem_to_reg,
-                branch_o, jump_o, alu_op_o, alu_src_o, mem_read_o, mem_write_o, reg_write_o, mem_to_reg_o);
+                branch_o, jump_o, alu_opmode_o, alu_src_o, mem_read_o, mem_write_o, reg_write_o, mem_to_reg_o);
         end else begin
             $display("%s[PASS] %-10s %s | Signals verified", C_GREEN, name, C_RESET);
         end

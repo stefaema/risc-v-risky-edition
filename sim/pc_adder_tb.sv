@@ -2,7 +2,7 @@
 
 module pc_adder_tb;
 
-    localparam string FILE_NAME = "pc_adder_tb.sv";
+    localparam string FILE_NAME = "PC Add Her";
     localparam string C_RESET   = "\033[0m";
     localparam string C_RED     = "\033[1;31m";
     localparam string C_GREEN   = "\033[1;32m";
