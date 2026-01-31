@@ -32,8 +32,8 @@ def execute_vivado(script, module_name, mode):
         "-log", log_file,
         "-tclargs", *tcl_args
     ]
-
-    Log.info(f"Executing {script.upper()} | Module: {module_name} | Mode: {mode}")
+    mode_str = (" | Mode: " + mode) if (mode != "none") else ""
+    Log.info(f"Executing {script.upper()}{mode_str} | Module: {module_name}")
     return subprocess.run(cmd).returncode == 0
 
 def run_task(command, module):
@@ -42,7 +42,7 @@ def run_task(command, module):
         "synth":    lambda: execute_vivado("build", module, "synth"),
         "impl":     lambda: execute_vivado("build", module, "impl"),
         "bit":      lambda: execute_vivado("build", module, "bitstream"),
-        "sim":      lambda: execute_vivado("sim", module, "synth"),
+        "sim":      lambda: execute_vivado("sim", module, "none"),
         "program":  lambda: execute_vivado("program", module, "none"),
     }
 

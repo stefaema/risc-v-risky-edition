@@ -7,25 +7,27 @@
 //              - 1 Synchronous Write Port (posedge clk).
 // -----------------------------------------------------------------------------
 
-module register_file (
+module register_file #(
+    parameter int REG_WIDTH = 32
+)(
     input  logic        clk,
     input  logic        rst_n,
     
     // Read Ports
     input  logic [4:0]  rs1_addr_i,
     input  logic [4:0]  rs2_addr_i,
-    output logic [31:0] read_data1_o,
-    output logic [31:0] read_data2_o,
+    output logic [REG_WIDTH-1:0] read_data1_o,
+    output logic [REG_WIDTH-1:0] read_data2_o,
 
     // Write Port
     input  logic [4:0]  rd_addr_i,
-    input  logic [31:0] write_data_i,
+    input  logic [REG_WIDTH-1:0] write_data_i,
     input  logic        reg_write_en
 );
 
 
     // Signal Declarations
-    logic [31:0] reg_file [31:0]; // 32 registers of 32 bits each
+    logic [REG_WIDTH-1:0] reg_file [31:0]; // 32 registers of 32 bits each
     integer i; // Iterator for reset loop
 
     // Read Logic (Asynchronous, pure combinational)

@@ -1,5 +1,5 @@
 //-----------------------------------------------------------------------------------
-//  Module: imm_gen
+//  Module: immediate_generator
 //
 //  Description: RV32I Immediate Generator. 
 // Extracts and sign-extends immediates from the instruction.
@@ -12,7 +12,7 @@
 // J-type: { {11{inst[31]}}, inst[31], inst[19:12], inst[20], inst[30:21], 1'b0 }
 //-----------------------------------------------------------------------------------
 
-module imm_gen (
+module immediate_generator (
     input  logic [31:0] instruction_word_i,    // 32-bit raw instruction
     output logic [31:0] ext_immediate_o   // 32-bit sign-extended immediate
 );

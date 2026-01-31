@@ -6,7 +6,9 @@
 //              - Holds value if 'stall' is asserted.
 // -----------------------------------------------------------------------------
 
-module program_counter_reg (
+module program_counter_reg #(
+    parameter int PC_WIDTH = 32
+)(
     input  logic        clk,
     input  logic        rst_n,     // Active Low Reset
     input  logic        stall_i,   // 1 = Freeze PC

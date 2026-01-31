@@ -19,8 +19,7 @@ This document provides the encoding reference and functional behavior (RTL) for 
 | 31 ... 25 | 24 ... 20 | 19 ... 15 | 14 ... 12 | 11 ... 7 | 6 ... 0 |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | **funct7** | **rs2** | **rs1** | **funct3** | **rd** | **opcode** |
-
-**Opcode:** `0110011`
+k
 
 | Instruction | funct7 | rs2 | rs1 | funct3 | rd | opcode | Functional Description (RTL) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |

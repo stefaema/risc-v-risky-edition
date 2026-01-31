@@ -2,49 +2,50 @@
 
 module register_file_tb;
 
+    // --- Metadata & Constants ---
+    localparam string FILE_NAME = "The Register's Gambit";
+    localparam string C_RESET    = "\033[0m";
+    localparam string C_RED      = "\033[1;31m"; 
+    localparam string C_GREEN    = "\033[1;32m"; 
+    localparam string C_BLUE     = "\033[1;34m"; 
+    localparam string C_CYAN     = "\033[1;36m"; 
 
-    // Metadata & Constants
-    localparam string FILE_NAME = "REGinald file";
-    localparam string C_RESET   = "\033[0m";
-    localparam string C_RED     = "\033[1;31m";
-    localparam string C_GREEN   = "\033[1;32m";
-    localparam string C_BLUE    = "\033[1;34m";
-    localparam string C_CYAN    = "\033[1;36m";
-
-    // DUT Signals
+    // --- DUT Signals ---
     logic        clk;
     logic        rst_n;
-    logic [4:0]  rs1_addr, rs2_addr, rd_addr;
-    logic [31:0] write_data;
+    logic [4:0]  rs1_addr_i, rs2_addr_i, rd_addr_i;
+    logic [31:0] write_data_i;
     logic        reg_write_en;
-    logic [31:0] read_data1, read_data2;
+    logic [31:0] read_data1_o, read_data2_o;
 
     int test_count = 0;
     int error_count = 0;
 
+    // Explicitly using .* to match DUT ports
     register_file uut (.*); 
 
-    // Clock Generation
+    // --- Clock Generation ---
     initial begin
-        clk = 0; // Starting at 0 to make the first negedge predictable
+        clk = 0; 
         forever #5 clk = ~clk; 
     end
 
-    // Verification Task
-    task check(input logic [31:0] expected, input logic [31:0] received, input string msg);
+    // --- Automated Check Task ---
+    task check(input logic [31:0] expected, input logic [31:0] actual, input string test_name);
         test_count++;
-        if (expected === received) begin
-            $display("%s[PASS]%s %-30s | Exp: 0x%h | Rec: 0x%h", 
-                     C_GREEN, C_RESET, msg, expected, received);
+        if (actual === expected) begin
+            $display("%-40s %s[PASS]%s", test_name, C_GREEN, C_RESET);
         end else begin
-            $display("%s[FAIL]%s %-30s | Exp: 0x%h | Rec: 0x%h", 
-                     C_RED, C_RESET, msg, expected, received);
+            $display("%-40s %s[FAIL]%s", test_name, C_RED, C_RESET);
+            $display("    Expected: 0x%h", expected);
+            $display("    Received: 0x%h", actual);
             error_count++;
         end
     endtask
 
+    // --- Main Stimulus ---
     initial begin
-
+        // Header Block
         $display("\n%s=======================================================%s", C_CYAN, C_RESET);
         $display("%s Testbench: %-38s %s", C_CYAN, FILE_NAME, C_RESET);
         $display("%s=======================================================%s\n", C_CYAN, C_RESET);
@@ -52,64 +53,72 @@ module register_file_tb;
         $display("%s[TEST PHASE 1] Initialization & Reset%s", C_BLUE, C_RESET);
         rst_n = 0;
         reg_write_en = 0;
-        rs1_addr = 0; rs2_addr = 0; rd_addr = 0; write_data = 0;
-        #15; // Hold reset across a clock edge
+        rs1_addr_i = 0; rs2_addr_i = 0; rd_addr_i = 0; write_data_i = 0;
+        #15; 
         rst_n = 1;
-        #5;
         
-        rs1_addr = 1;
-        #1;
-        check(32'h00000000, read_data1, "Check Reset State (x1)");
+        // - Test 1: Reset State
+        rs1_addr_i = 1;
+        #1; 
+        check(32'h0, read_data1_o, "Check Reset State (x1)");
 
         $display("\n%s[TEST PHASE 2] Write & Read Operations%s", C_BLUE, C_RESET);
         
-        // --- Write 0xDEADBEEF to x1 ---
+        // - Test 2: Single Write/Read
+        // Setup: Prepare write
         @(posedge clk);
-        rd_addr = 1;
-        write_data = 32'hDEADBEEF;
+        rd_addr_i = 1;
+        write_data_i = 32'hDEADBEEF;
         reg_write_en = 1;
         
-        // Wait for Negedge (Write occurs) then Posedge (Read is stable)
+        // Trigger: Write happens at negedge. Setup Read for next check.
         @(posedge clk); 
-        reg_write_en = 0; // Disable write
-        rs1_addr = 1;
-        #1; 
-        check(32'hDEADBEEF, read_data1, "Read x1 after Write");
+        reg_write_en = 0;
+        rs1_addr_i = 1; // Set read address NOW
+        #1;             // WAIT for logic to settle
+        check(32'hDEADBEEF, read_data1_o, "Read x1 after Write");
 
-        // --- Write 0xCAFEBABE to x2 ---
+        // - Test 3: Dual Port Read
+        // Setup: Write second value
         @(posedge clk);
-        rd_addr = 2;
-        write_data = 32'hCAFEBABE;
+        rd_addr_i = 2;
+        write_data_i = 32'hCAFEBABE;
         reg_write_en = 1;
 
-        // Read both ports
+        // Trigger: Wait for write, set up Dual Read
         @(posedge clk);
         reg_write_en = 0;
-        rs1_addr = 1;
-        rs2_addr = 2;
-        #1;
-        check(32'hDEADBEEF, read_data1, "Dual Read Port 1 (x1)");
-        check(32'hCAFEBABE, read_data2, "Dual Read Port 2 (x2)");
+        rs1_addr_i = 1; // Read Port 1 -> x1 (DEADBEEF)
+        rs2_addr_i = 2; // Read Port 2 -> x2 (CAFEBABE)
+        #1;             // WAIT for logic to settle
+        check(32'hDEADBEEF, read_data1_o, "Dual Read Port 1 (x1)");
+        check(32'hCAFEBABE, read_data2_o, "Dual Read Port 2 (x2)");
 
         $display("\n%s[TEST PHASE 3] x0 Invariant Check%s", C_BLUE, C_RESET);
         
-        @(posedge clk); // Attempt to write to x0
-        rd_addr = 0;
-        write_data = 32'hFFFFFFFF;
+        // - Test 4: x0 Hardwired to Zero
+        // Setup: Try writing garbage to x0
+        @(posedge clk);
+        rd_addr_i = 0;
+        write_data_i = 32'hFFFFFFFF;
         reg_write_en = 1;
         
-        @(posedge clk); // Check that x0 is still 0
+        // Trigger: Set read addr to x0
+        @(posedge clk);
         reg_write_en = 0;
-        rs1_addr = 0;
-        #1;
-        check(32'h00000000, read_data1, "Write to x0 Ignored");
+        rs1_addr_i = 0; // Set read addr to x0
+        #1;             // WAIT for logic to settle
+        check(32'h0, read_data1_o, "Write to x0 Ignored");
 
-        $display("\n%s=======================================================%s", C_CYAN, C_RESET);
-        if (error_count == 0)
-            $display(" %sSTATUS: SUCCESS%s", C_GREEN, C_RESET);
-        else
-            $display(" %sSTATUS: FAILURE%s", C_RED, C_RESET);
-        $display("%s=======================================================%s\n", C_CYAN, C_RESET);
+        // Summary Footer
+        $display("\n%s-------------------------------------------------------%s", C_BLUE, C_RESET);
+        if (error_count == 0) begin
+            $display("Tests: %0d | Errors: %0d -> %sSUCCESS%s", test_count, error_count, C_GREEN, C_RESET);
+        end else begin
+            $display("Tests: %0d | Errors: %0d -> %sFAILURE%s", test_count, error_count, C_RED, C_RESET);
+        end
+        $display("%s-------------------------------------------------------%s\n", C_BLUE, C_RESET);
+        
         $finish;
     end
 
