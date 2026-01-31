@@ -17,7 +17,7 @@
 ### **Naming Conventions**
 
 * **Modules:** Subject to developer discretion; should be concise and potentially humorous.
-* **Ports/Signals:** `snake_case` (e.g., `reg_write_en`).
+* **Ports/Signals:** `snake_case` (e.g., `reg_write_en`). Also adhere to standard practices (i.e. _in and _out suffixes)
 * **Constants and localparams:** `UPPER_CASE` (e.g., `DATA_WIDTH`).
 
 ---

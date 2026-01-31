@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module program_counter_tb;
+module program_counter_reg_tb;
 
     // TB Constants & ANSI Colors
     localparam string FILE_NAME = "PC Gamer";
@@ -13,21 +13,21 @@ module program_counter_tb;
     // DUT Signals
     logic        clk;
     logic        rst_n;
-    logic        stall;
-    logic [31:0] pc_in;
-    logic [31:0] pc_out;
+    logic        stall_i;
+    logic [31:0] pc_i;
+    logic [31:0] pc_o;
 
     // Statistics
     int error_count = 0;
     int test_count = 0;
 
     // DUT Instantiation
-    program_counter dut (
+    program_counter_reg dut (
         .clk    (clk),
         .rst_n  (rst_n),
-        .stall  (stall),
-        .pc_in  (pc_in),
-        .pc_out (pc_out)
+        .stall_i  (stall_i),
+        .pc_i  (pc_i),
+        .pc_o (pc_o)
     );
 
     // Clock Generation
@@ -39,12 +39,12 @@ module program_counter_tb;
     // Verification Logic
     task check(input logic [31:0] expected, input string test_name);
         test_count++;
-        if (pc_out === expected) begin
+        if (pc_o === expected) begin
             $display("%-40s %s[PASS]%s", test_name, C_GREEN, C_RESET);
         end else begin
             $display("%-40s %s[FAIL]%s", test_name, C_RED, C_RESET);
             $display("  Expected: 0x%h", expected);
-            $display("  Received: 0x%h", pc_out);
+            $display("  Received: 0x%h", pc_o);
             error_count++;
         end
     endtask
@@ -53,8 +53,8 @@ module program_counter_tb;
     initial begin
         // Initialize
         rst_n = 0; // Start in Reset
-        stall = 0;
-        pc_in = 32'd0;
+        stall_i = 0;
+        pc_i = 32'd0;
 
         // Header
         $display("\n%s=======================================================%s", C_CYAN, C_RESET);
@@ -64,7 +64,7 @@ module program_counter_tb;
 
         // Test 1: Reset Check
         @(posedge clk);
-        pc_in = 32'hDEAD_BEEF; // Random input
+        pc_i = 32'hDEAD_BEEF; // Random input
         rst_n = 0;             // Assert Reset (Active Low)
         #1;                    // Propagate
         check(32'd0, "Reset Asserted");
@@ -72,28 +72,28 @@ module program_counter_tb;
         // Test 2: Normal Operation
         @(posedge clk);
         rst_n = 1;             // Release Reset
-        pc_in = 32'h0000_0004; // Address 4
+        pc_i = 32'h0000_0004; // Address 4
         
         @(posedge clk);        // Wait for clock edge to capture input
         #1;
         check(32'h0000_0004, "Standard Update");
 
-        // Test 3: Stall Check
+        // Test 3: Stall_i Check
         // Setup input for next cycle
-        pc_in = 32'h0000_0008; 
-        stall = 1; 
+        pc_i = 32'h0000_0008; 
+        stall_i = 1; 
         
         @(posedge clk);
         #1;
-        check(32'h0000_0004, "Stall Active (Value Held)");
+        check(32'h0000_0004, "Stall_i Active (Value Held)");
 
-        // Test 4: Release Stall
-        stall = 0;
-        // pc_in is still 0x8
+        // Test 4: Release Stall_i
+        stall_i = 0;
+        // pc_i is still 0x8
         
         @(posedge clk);
         #1;
-        check(32'h0000_0008, "Stall Released (Value Updated)");
+        check(32'h0000_0008, "Stall_i Released (Value Updated)");
 
         // Final Summary
         $display("\n%s-------------------------------------------------------%s", C_BLUE, C_RESET);
