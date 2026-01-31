@@ -122,7 +122,14 @@ To maintain a "clean code" aesthetic, comments should be surgical. Avoid stating
 
 * **Minimalism:** If the code is readable, let it speak. Only comment when a "why" is needed, not a "what."
 
-## 5. File and Module Naming
+## 5. Non-testbench Directives
+- Make a header with the format:
+    // -----------------------------------------------------------------------------
+    // Module:
+    // Description: 
+    // -----------------------------------------------------------------------------
+
+- Naming Conventions 1:
 
 To ensure compatibility with the project's automation scripts (`manage.py`) and Vivado's elaboration flow, all testbenches must follow a strict suffix-based naming convention.
 
@@ -135,13 +142,8 @@ To ensure compatibility with the project's automation scripts (`manage.py`) and 
 | `alu` | `alu_tb` |
 | `riscv_core` | `riscv_core_tb` |
 
-## 6. Non-testbench Directives
-- Make a header with the format:
-    // -----------------------------------------------------------------------------
-    // Module:
-    // Description: 
-    // -----------------------------------------------------------------------------
-- Naming Conventions
+
+- Naming Conventions 2:
 
     To maintain a balance between structural clarity and code readability, we apply suffixes selectively. Avoid redundant suffixes (e.g., `_o`) on signals whose names already imply their direction or purpose.
 
