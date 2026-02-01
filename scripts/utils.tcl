@@ -24,12 +24,13 @@ proc setup_env {prj part top tb} {
     set_msg_config -id {Project 1-5713} -suppress ;# Board part not found
     set_msg_config -id {Board 49-26} -suppress    ;# Board initialization
 
+    # 2. Create or Sync Project
+    log_puts "info" "Setting up project environment for $prj"
+
     if {[file exists $prj_dir/$prj.xpr]} {
         log_puts "info" "Syncing existing project: $prj"
         open_project $prj_dir/$prj.xpr
         
-        # This is the "Magic" to stop the Missing File warnings
-        # It removes the internal references before we re-add them
         remove_files [get_files] -quiet
     } else {
         log_puts "info" "Creating fresh project for chip: $part"
@@ -37,16 +38,57 @@ proc setup_env {prj part top tb} {
         create_project $prj $prj_dir -part $part -force
     }
 
-    # 2. Add Sources
+    # 3. Add Sources from ./src directory
+    log_puts "info" "Adding Sources from ./src"
+
     if {[file isdirectory "./src"]} { add_files -quiet ./src }
     if {[file isdirectory "./sim"]} { add_files -fileset sim_1 -quiet ./sim }
     
-    # 3. Add Constraints (This is crucial when not using Board Parts)
+    # 4. Add IP Cores from ./ip directory
+    log_puts "info" "Checking for IP Cores in ./ip and adding if present"
+
+    if {[file isdirectory "./ip"]} {
+            log_puts "info" "Adding IP Cores from ./ip"
+            # Find all .xci files in the ip directory
+            set ip_files [glob -nocomplain "./ip/*.xci"]
+            
+            if {$ip_files != ""} {
+                add_files -quiet $ip_files
+                
+                # Optional: Force generation of IP targets (Synthesis/Simulation products)
+                # This ensures the IP is ready for the next steps.
+                foreach ip $ip_files {
+                    set ip_name [file rootname [file tail $ip]]
+                    # Check if the IP is locked (needs upgrade)
+                    set locked [get_property IS_LOCKED [get_ips $ip_name]]
+                    if {$locked} {
+                        log_puts "warn" "Upgrading IP: $ip_name"
+                        upgrade_ip [get_ips $ip_name]
+                    }
+                    # Generate output products (Synthesis, Simulation, Instantiation Template)
+                    generate_target all [get_ips $ip_name]
+                }
+            } else {
+                log_puts "warn" "IP directory exists but contains no .xci files."
+            }
+        }
+    
+
+    # 5. Add Simulation sources from ./sim directory
+    log_puts "info" "Adding Simulation Sources from ./sim if present"
+    if {[file isdirectory "./sim"]} { 
+        add_files -fileset sim_1 -quiet ./sim 
+    }
+
+
+    # 6. Add Constraints 
+    log_puts "info" "Adding Constraints"
     if {[file exists $specific_xdc]} {
         add_files -quiet $specific_xdc
     }
 
-    # 4. Final Setup
+    # 7. Final Setup
+    log_puts "info" "Finalizing Project Setup"
     set_property top $top [current_fileset]
     set_property top $tb [get_filesets sim_1]
     update_compile_order -fileset sources_1

@@ -244,6 +244,70 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 * `10`: **Memory Data** (Loads).
 * **Outputs:** Selected input signal.
 
+## 3.6. Pipeline Registers (registers)
+
+These modules act as the state barriers between the combinational logic stages. They capture the results of a stage on the rising clock edge and hold them stable for the subsequent stage, defining the "context" of the instruction as it moves through the pipeline.
+
+#### `pipeline_register` (Generic Template)
+
+* **Function:** Parameterizable register with flow control capabilities.
+* **Inputs:**
+* `clk`: System clock.
+* `sync_reset`: Synchronous Clear/Flush signal (High priority). Used for Branch Flushing.
+* `enable`: Write Enable/Stall signal (Low priority). Used for Load-Use Stalls.
+* `data_i`: Input payload packet.
+
+
+* **Outputs:**
+* `data_o`: Registered output payload.
+
+
+* **Logic:**
+* If `sync_reset` is High: `data_o`  0.
+* Else if `enable` is High: `data_o`  `data_i`.
+* Else: Hold current value.
+
+---
+
+### Pipeline Register Specifications
+
+#### `if_id_reg` (Fetch  Decode)
+
+* **Control:** Stallable (Load-Use), Flushable (Branch Taken).
+* **Payload:**
+* `pc_addr`: The address of the instruction (crucial for calculating PC-relative offsets).
+* `instruction_word`: The raw binary fetched from memory.
+
+
+
+#### `id_ex_reg` (Decode  Execute)
+
+* **Control:** Flushable (Branch Taken OR Load-Use Bubble).
+* **Payload:**
+* **Control Bus:** `reg_write_en`, `mem_write_en`, `mem_read_en`, `alu_src_optn`, `alu_intent`, `rd_src_optn`, `is_branch`, `is_jal`, `is_jalr`.
+* **Data:** `pc_addr`, `rs1_data` (Read Port 1), `rs2_data` (Read Port 2), `extended_imm`.
+* **Metadata:** `rs1_addr`, `rs2_addr` (Forwarding), `rd_addr` (Destination), `funct3`, `funct7` (ALU Control).
+
+
+
+#### `ex_mem_reg` (Execute  Memory)
+
+* **Control:** Always Enabled.
+* **Payload:**
+* **Control Bus:** `reg_write_en`, `mem_write_en`, `mem_read_en`, `rd_src_optn`.
+* **Data:** `alu_result` (Address/Result), `rs2_data` (Store Data), `pc_plus_4` (Link Address).
+* **Metadata:** `rd_addr` (Forwarding), `funct3` (Memory Alignment).
+
+
+
+#### `mem_wb_reg` (Memory  Writeback)
+
+* **Control:** Always Enabled.
+* **Payload:**
+* **Control Bus:** `reg_write_en`, `rd_src_optn`.
+* **Data:** `alu_result` (Passthrough), `final_read_data` (Load Data), `pc_plus_4` (Link Address).
+* **Metadata:** `rd_addr` (Writeback Target).
+
 ---
 
 ## 4. Hazard Management & Pipeline Optimization
@@ -254,7 +318,7 @@ This section details the logic required to maintain data integrity and instructi
 
 | Hazard Type | Cause | Resolution Mechanism |
 | --- | --- | --- |
-| **Data Hazard (R-A-W)** | An instruction needs a result that is currently in the **EX** or **MEM** stage (has not reached **WB** yet). | **Forwarding (Bypassing):** Routes the data directly from pipeline latches to the ALU. |
+| **Data Hazard (R-A-W)** | An instruction needs a result that is currently in the **EX** or **MEM** stage (has not reached **WB** yet). | **Forwarding (Bypassing):** Routes the data directly from pipeline registers to the ALU. |
 | **Load-Use Hazard** | An instruction needs a result from a `LOAD` instruction that is currently in the **EX** stage. Forwarding is impossible because the data is still in RAM. | **Stalling (Interlock):** Freezes the PC and IF/ID registers for 1 cycle and inserts a bubble (NOP). |
 | **Control Hazard** | A Branch or Jump changes the PC, but the pipeline has already fetched the next sequential instructions (Static Not-Taken assumption failed). | **Flushing:** Clears the valid bits of the IF/ID and ID/EX pipeline registers to discard the wrong instructions. |
 
@@ -264,7 +328,7 @@ This section details the logic required to maintain data integrity and instructi
 
 #### `forwarding_unit`
 
-* **Function:** Resolves **Read-After-Write (RAW)** hazards by controlling a bypass network. It detects when an instruction needs a register value that has not yet been committed to the Register File and routes that value directly from the pipeline latches to the ALU.
+* **Function:** Resolves **Read-After-Write (RAW)** hazards by controlling a bypass network. It detects when an instruction needs a register value that has not yet been committed to the Register File and routes that value directly from the pipeline registers to the ALU.
 
 * **Inputs:**
     * **Current Requirements (ID/EX):**
@@ -285,7 +349,7 @@ This section details the logic required to maintain data integrity and instructi
 * **Behaviour & Justification:**
     The Forwarding Unit functions as a combinational priority selector that governs the ALU's input multiplexers. It continuously compares the source registers of the executing instruction against the destination registers of the two previous instructions residing in the pipeline.
 
-    First, the unit checks for an **EX Hazard** (High Priority). If the instruction in the EX/MEM stage is writing to a needed register—and is *not* a Load instruction—the unit bypasses the Register File to grab data directly from the ALU output. The `mem_read` check is critical here: if the instruction in EX/MEM is a `LOAD`, the unit refuses to forward (as the latch contains an address, not data), forcing the pipeline to wait for the value to arrive from memory via a stall.
+    First, the unit checks for an **EX Hazard** (High Priority). If the instruction in the EX/MEM stage is writing to a needed register—and is *not* a Load instruction—the unit bypasses the Register File to grab data directly from the ALU output. The `mem_read` check is critical here: if the instruction in EX/MEM is a `LOAD`, the unit refuses to forward (as the register contains an address, not data), forcing the pipeline to wait for the value to arrive from memory via a stall.
     
     $$\text{if } (RegWrite_{EX/MEM} \land (Rd_{EX/MEM} \neq 0) \land (Rd_{EX/MEM} = Rs_{ID/EX}) \land \neg MemRead_{EX/MEM}) \rightarrow 10$$
 
@@ -341,8 +405,8 @@ This section details the logic required to maintain data integrity and instructi
 1. **Cycle N:** Branch is in EX. `flow_controller` determines "Taken". Assert `flush_req`.
 2. **Cycle N+1:**
 * PC is updated to `target_addr`.
-* IF/ID Latch becomes NOP (Instruction fetched in Cycle N is killed).
-* ID/EX Latch becomes NOP (Instruction decoded in Cycle N is killed).
+* IF/ID Register becomes NOP (Instruction fetched in Cycle N is killed).
+* ID/EX Register becomes NOP (Instruction decoded in Cycle N is killed).
 
 
 3. **Cycle N+2:** Correct instruction arrives at Fetch.
