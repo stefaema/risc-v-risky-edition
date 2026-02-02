@@ -237,25 +237,28 @@ Additionally, the Arbiter acts as the **System Janitor**. It enforces a strict "
 ## 6.2. UART Bus Switch (Routing Logic)
 The Arbiter implements a combinational routing matrix to isolate sub-modules from the UART signals. This prevents inactive modules from accidentally receiving data or corrupting the transmission line.
 
-*   **RX Path Gating:** The `data_ready_pulse` from the `uart_rx` module is gated via a 1-to-Many Demultiplexer. Only the module currently "granted" access by the Arbiter will receive the pulse.
-*   **TX Path Multiplexing:** The `tx_data` and `tx_start` inputs of the `uart_tx` module are driven by a Many-to-One Multiplexer. The Arbiter selects the active driver based on the current state.
-*   **Conflict Prevention:** All sub-modules are implicitly denied access to the physical pins unless they hold a valid `grant` signal.
+* **RX Path Gating:** The `data_ready_pulse` from the `uart_rx` module is gated via a 1-to-Many Demultiplexer. Only the module currently "granted" access by the Arbiter will receive the pulse.
+* **TX Path Multiplexing:** The `tx_data` and `tx_start` inputs of the `uart_tx` module are driven by a Many-to-One Multiplexer. The Arbiter selects the active driver based on the current state.
+* **Conflict Prevention:** All sub-modules are implicitly denied access to the physical pins unless they hold a valid `grant` signal.
 
 ## 6.3. FSM & Interpretation Logic
 
-The Arbiter operates via a Master Finite State Machine designed for low-latency handoffs and automatic system scrubbing:
+The Arbiter operates via a Master Finite State Machine designed to ensure protocol stability before handing off control:
 
 1. **IDLE:** Monitors the gated UART RX for a Command Byte.
 2. **DECODE:** Identifies the command (`0x1C`, `0x1D`, `0xCE`, `0xDE`) via the `c2_byte_table`.
-3. **ACK_HANDOFF (Fire & Forget):**
-    * **Cycle 0:** The Arbiter places the received Command Byte onto the `tx_data` bus and asserts `tx_start`.
-    * **Cycle 1:** The Arbiter immediately asserts the specific `grant` signal for the target sub-module (e.g., `grant_loader_o`) and transitions state. It does **not** wait for the ACK transmission to complete.
-    * *Rationale:* This allows the sub-module to catch incoming data packets (like "Size High Byte") that may arrive while the UART TX is still shifting out the ACK.
-4. **SUB_MODULE_BUSY:** The Arbiter enters a passive monitoring state. It ignores UART traffic and waits solely for a `done_i` signal from the active sub-module.
-5. **S_CLEANUP:** Entered immediately upon receiving `done_i`.
+3. **ACK_TRIGGER:** The Arbiter places the received Command Byte onto the `tx_data` bus and asserts `tx_start` for one cycle.
+4. **ACK_WAIT (Blocking):**
+    * The Arbiter enters a wait state until `uart_tx_done_i` is asserted by the transceiver.
+    * **Crucial:** During this time, **no** grant signals are issued to sub-modules. This prevents the Host from sending payload data (e.g., Size bytes) before the FPGA is fully ready to listen.
+5. **SUB_MODULE_BUSY:** Entered immediately after the ACK transmission completes.
+    * The specific `grant` signal (Loader or Debugger) is asserted.
+    * The Arbiter ignores UART traffic and waits solely for a `done_i` signal from the active sub-module.
+6. **S_CLEANUP:** Entered immediately upon receiving `done_i`.
     * **Action:** Asserts `soft_reset_o` (driving `global_flush_i` on the Core).
-    * **Goal:** Resets PC to 0 and invalidates pipeline buffers. This removes any residual state from a previous run or jump, ensuring the next `CMD_CONT_EXEC` starts from the reset vector.
-6. **RECOVERY:** De-asserts `soft_reset_o` and all `grant` signals, then returns to **IDLE**.
+    * **Goal:** Resets PC to 0 and invalidates pipeline buffers.
+7. **RECOVERY:** De-asserts `soft_reset_o` and all `grant` signals, then returns to **IDLE**.
+
 
 ---
 

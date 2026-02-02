@@ -20,3 +20,8 @@ target:
     addi x4, x0, 0xACE   # x4 = 0xACE
     
     ecall
+
+# Should result in:
+# x1 = 0x1
+# x2 = 0x1
+# x4 = 0xFFFFFACE (0xACE, but sign-extended to 32 bits)

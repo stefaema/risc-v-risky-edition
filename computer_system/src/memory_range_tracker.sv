@@ -6,7 +6,7 @@
 
 module memory_range_tracker (
     input  logic        clk,
-    input  logic        global_flush_i,
+    input  logic        soft_reset_i,
     input  logic        mem_write_en,
     input  logic [31:0] addr_in_use_i,
     output logic [31:0] min_addr_o,
@@ -14,7 +14,7 @@ module memory_range_tracker (
 );
 
     always_ff @(posedge clk) begin
-        if (global_flush_i) begin
+        if (soft_reset_i) begin
             // Initialize inverted to capture first valid write
             min_addr_o <= 32'hFFFF_FFFF;
             max_addr_o <= 32'h0000_0000;

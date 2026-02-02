@@ -6,34 +6,34 @@
 // -----------------------------------------------------------------------------
 
 module c2_arbiter (
-    input  logic       clk_i,
-    input  logic       rst_ni,
+    input  logic        clk_i,
+    input  logic        rst_ni,
 
     // Physical UART Interface
     input  logic [7:0] uart_rx_data_i,
-    input  logic       uart_rx_ready_i,
+    input  logic        uart_rx_ready_i,
     output logic [7:0] uart_tx_data_o,
-    output logic       uart_tx_start_o,
-    input  logic       uart_tx_done_i,
+    output logic        uart_tx_start_o,
+    input  logic        uart_tx_done_i,
 
     // Core Control Output
-    output logic       soft_reset_o,      // Global Flush: zeroes PC, RegFile, Pipeline regs and Memory Range Tracker
+    output logic        soft_reset_o,       // Global Flush: zeroes PC, RegFile, Pipeline regs and Memory Range Tracker
 
     // Loader Interface
-    output logic       grant_loader_o,
-    output logic       loader_target_o,   // 0 = IMEM, 1 = DMEM
-    input  logic       loader_done_i,
+    output logic        grant_loader_o,
+    output logic        loader_target_o,    // 0 = IMEM, 1 = DMEM
+    input  logic        loader_done_i,
     // Loader UART TX Taps
     input  logic [7:0] loader_tx_data_i,
-    input  logic       loader_tx_start_i,
+    input  logic        loader_tx_start_i,
 
     // Debug Interface (Controls Debug Unit + Dumping Unit)
-    output logic       grant_debug_o,
-    output logic       debug_exec_mode_o, // 0 = Step, 1 = Continuous
-    input  logic       debug_done_i,
+    output logic        grant_debug_o,
+    output logic        debug_exec_mode_o, // 0 = Step, 1 = Continuous
+    input  logic        debug_done_i,
     // Dumper UART TX Taps (Dumper operates under Debug Grant)
     input  logic [7:0] dumper_tx_data_i,
-    input  logic       dumper_tx_start_i
+    input  logic        dumper_tx_start_i
 );
 
     // -------------------------------------------------------------------------
@@ -49,8 +49,9 @@ module c2_arbiter (
     // -------------------------------------------------------------------------
     typedef enum logic [2:0] {
         S_IDLE,
-        S_ACK_HANDOFF,      // Echo Command & Grant Access
-        S_BUSY,             // Wait for Sub-Module Done
+        S_ACK_TRIGGER,      // Start Echo/ACK Transmission
+        S_WAIT_ACK,         // Wait for Echo/ACK to finish (Blocking)
+        S_BUSY,             // Grant Access & Wait for Sub-Module Done
         S_CLEANUP,          // Assert Soft Reset
         S_RECOVERY          // De-assert Reset & Grants, Return to Idle
     } state_t;
@@ -73,8 +74,8 @@ module c2_arbiter (
     // -------------------------------------------------------------------------
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni) begin
-            state           <= S_IDLE;
-            latched_cmd     <= 8'h00;
+            state             <= S_IDLE;
+            latched_cmd       <= 8'h00;
             reg_loader_target <= 1'b0;
             reg_debug_mode    <= 1'b0;
         end else begin
@@ -113,22 +114,25 @@ module c2_arbiter (
                         uart_rx_data_i == CMD_LOAD_DATA || 
                         uart_rx_data_i == CMD_CONT_EXEC || 
                         uart_rx_data_i == CMD_DEBUG_EXEC) begin
-                        next_state = S_ACK_HANDOFF;
+                        next_state = S_ACK_TRIGGER;
                     end
                 end
             end
 
-            S_ACK_HANDOFF: begin
+            S_ACK_TRIGGER: begin
                 arb_tx_start = 1'b1;
-                if (latched_cmd == CMD_LOAD_CODE || latched_cmd == CMD_LOAD_DATA) begin
-                    internal_grant_loader = 1'b1;
-                end else begin
-                    internal_grant_debug = 1'b1;
+                next_state   = S_WAIT_ACK;
+            end
+
+            S_WAIT_ACK: begin
+                // Blocking wait: Do not proceed until the ACK byte has fully left the UART.
+                if (uart_tx_done_i) begin
+                    next_state = S_BUSY;
                 end
-                next_state = S_BUSY;
             end
 
             S_BUSY: begin
+                // Only grant access AFTER the ACK is complete
                 if (latched_cmd == CMD_LOAD_CODE || latched_cmd == CMD_LOAD_DATA) begin
                     internal_grant_loader = 1'b1;
                     if (loader_done_i) next_state = S_CLEANUP;
@@ -159,7 +163,7 @@ module c2_arbiter (
         debug_exec_mode_o = reg_debug_mode;
 
         // UART TX Mux
-        if (state == S_ACK_HANDOFF) begin
+        if (state == S_ACK_TRIGGER) begin
             uart_tx_data_o  = latched_cmd;
             uart_tx_start_o = arb_tx_start;
         end else if (internal_grant_loader) begin

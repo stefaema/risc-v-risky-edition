@@ -1,52 +1,32 @@
-Understood. By restoring `PC+4` to the Writeback dump and maintaining strict 32-bit word alignment for every section, the total dump size becomes **76 Bytes**.
+# 6. Command & Control Arbiter (`c2_arbiter`)
 
-Here are the updated specification sections.
+## 6.1. Functional Overview
 
-### 9.4. Pipeline State Serialization
+The `c2_arbiter` acts as the system's central management unit and "Traffic Controller." Its primary responsibility is to maintain the UART as a critical section, ensuring that only one module at a time has access to the transceiver's serial resources. It interprets high-level commands from the Host and manages the handover of control to the Loader or Debug units.
 
-Pipeline registers are packed into fixed-width byte structures within the Dump Unit. To ensure optimal software parsing speed and 32-bit alignment, all payloads are padded to full 32-bit word boundaries.
+Additionally, the Arbiter acts as the **System Janitor**. It enforces a strict "Clean Before Use" policy: regardless of whether the previous operation was a Memory Load or a Code Execution, the Arbiter triggers a Soft Reset (`S_CLEANUP`) upon completion. This guarantees that the Core always begins the next operation from a deterministic state (PC=0).
 
-* **Hazard Flags (4 Bytes):**
-* **Byte 0:** `[4]ID_Flush`, `[3]IF_Flush`, `[2]EX_Stall`, `[1]ID_Stall`, `[0]PC_Stall`.
-* **Byte 1:** `[3:2]Forward_A_Optn`, `[1:0]Forward_B_Optn`.
-* **Bytes 2-3:** Padding (`0x0000`).
+## 6.2. UART Bus Switch (Routing Logic)
+The Arbiter implements a combinational routing matrix to isolate sub-modules from the UART signals. This prevents inactive modules from accidentally receiving data or corrupting the transmission line.
 
+* **RX Path Gating:** The `data_ready_pulse` from the `uart_rx` module is gated via a 1-to-Many Demultiplexer. Only the module currently "granted" access by the Arbiter will receive the pulse.
+* **TX Path Multiplexing:** The `tx_data` and `tx_start` inputs of the `uart_tx` module are driven by a Many-to-One Multiplexer. The Arbiter selects the active driver based on the current state.
+* **Conflict Prevention:** All sub-modules are implicitly denied access to the physical pins unless they hold a valid `grant` signal.
 
-* **IF/ID (12 Bytes):**
-* Includes `PC` (4B), `Instruction` (4B), and `PC+4` (4B).
+## 6.3. FSM & Interpretation Logic
 
+The Arbiter operates via a Master Finite State Machine designed to ensure protocol stability before handing off control:
 
-* **ID/EX (28 Bytes):**
-* Includes `Control_Bus` (2B + 2B Pad), `PC` (4B), `PC+4` (4B), `RS1_Data` (4B), `RS2_Data` (4B), `Immediate` (4B), and `Metadata` (4B).
-
-
-* **EX/MEM (16 Bytes):**
-* Includes `Control_Bus` & `Metadata` (2B + 2B Pad), `ALU_Result` (4B), `RS2_Data` (4B), and `PC+4` (4B).
-
-
-* **MEM/WB (16 Bytes):**
-* Includes `Control_Bus` & `Metadata` (2B + 2B Pad), `ALU_Result` (4B), `Mem_Read_Data` (4B), and `PC+4` (4B).
-
-
-
-### 10.5.3. Pipeline Dump (Fixed 76 Bytes)
-
-The following table defines the exact bit-to-byte mapping for the UART serialization stream. All fields are Little-Endian. Every major section starts on a 4-byte boundary.
-
-| Section | Offset | Size | Fields Included (Word-Aligned Mapping) |
-| --- | --- | --- | --- |
-| **Hazard** | **0x00** | **4 Bytes** | **Byte 0:** Status Flags<br>
-
-<br>**Byte 1:** Forwarding Ops<br>
-
-<br>**Bytes 2-3:** Padding (`0x0000`) |
-| **IF/ID** | **0x04** | **12 Bytes** | `PC` (4B), `Inst` (4B), `PC+4` (4B) |
-| **ID/EX** | **0x10** | **28 Bytes** | `Ctrl` (2B+Pad), `PC` (4B), `PC+4` (4B), `RS1` (4B), `RS2` (4B), `Imm` (4B), `Meta` (4B) |
-| **EX/MEM** | **0x2C** | **16 Bytes** | `Ctrl_Meta` (2B+Pad), `ALU_Res` (4B), `RS2_Data` (4B), `PC+4` (4B) |
-| **MEM/WB** | **0x3C** | **16 Bytes** | `Ctrl_Meta` (2B+Pad), `ALU_Res` (4B), `Mem_Data` (4B), `PC+4` (4B) |
-
-**Total Dump Size:** **76 Bytes** (0x00 to 0x4B).
-
----
-
-I am ready to implement **`src/dumping_unit.sv`** using this 76-byte aligned structure. Shall I proceed?
+1. **IDLE:** Monitors the gated UART RX for a Command Byte.
+2. **DECODE:** Identifies the command (`0x1C`, `0x1D`, `0xCE`, `0xDE`) via the `c2_byte_table`.
+3. **ACK_TRIGGER:** The Arbiter places the received Command Byte onto the `tx_data` bus and asserts `tx_start` for one cycle.
+4. **ACK_WAIT (Blocking):**
+    * The Arbiter enters a wait state until `uart_tx_done_i` is asserted by the transceiver.
+    * **Crucial:** During this time, **no** grant signals are issued to sub-modules. This prevents the Host from sending payload data (e.g., Size bytes) before the FPGA is fully ready to listen.
+5. **SUB_MODULE_BUSY:** Entered immediately after the ACK transmission completes.
+    * The specific `grant` signal (Loader or Debugger) is asserted.
+    * The Arbiter ignores UART traffic and waits solely for a `done_i` signal from the active sub-module.
+6. **S_CLEANUP:** Entered immediately upon receiving `done_i`.
+    * **Action:** Asserts `soft_reset_o` (driving `global_flush_i` on the Core).
+    * **Goal:** Resets PC to 0 and invalidates pipeline buffers.
+7. **RECOVERY:** De-asserts `soft_reset_o` and all `grant` signals, then returns to **IDLE**.

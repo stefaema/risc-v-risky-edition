@@ -14,7 +14,7 @@ module pipeline_register #(
     input  logic             flush_i,        // Synchronous Clear (High Priority)
     input  logic             global_flush_i, // Global Flush Signal (Optional)
     input  logic             write_en_i,     // 0 = Stall (Low Priority)
-    input  logic             global_stall_i, // Global Stall Signal (Optional)
+    input logic              bubble_i,
 
     // Data Path
     input  logic [WIDTH-1:0] data_i,
@@ -28,7 +28,7 @@ module pipeline_register #(
         else if (flush_i || global_flush_i) begin
             data_o <= {WIDTH{1'b0}}; // Synchronous Flush (Insert Bubble/NOP)
         end
-        else if (write_en_i && !global_stall_i) begin
+        else if (write_en_i) begin
             data_o <= data_i;        // Update if NOT Stalled
         end
         // else: Implicitly hold current value (Stall)

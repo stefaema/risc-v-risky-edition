@@ -32,8 +32,7 @@ module forwarding_unit (
         // and is NOT a Load (mem_read == 0).
         if (reg_write_ex_mem_en &&
            (rd_ex_mem_i != 5'b0) &&
-           (rd_ex_mem_i == rs1_id_ex_i) &&
-           !mem_read_ex_mem_en) begin
+           (rd_ex_mem_i == rs1_id_ex_i)) begin
             forward_a_optn_o = 2'b10; // Forward from ALU Result
 
         // Priority 2: MEM Hazard
@@ -57,8 +56,7 @@ module forwarding_unit (
         // Priority 1: EX Hazard
         if (reg_write_ex_mem_en &&
            (rd_ex_mem_i != 5'b0) &&
-           (rd_ex_mem_i == rs2_id_ex_i) &&
-           !mem_read_ex_mem_en) begin
+           (rd_ex_mem_i == rs2_id_ex_i)) begin
             forward_b_optn_o = 2'b10; // Forward from ALU Result
 
         // Priority 2: MEM Hazard

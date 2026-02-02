@@ -52,7 +52,7 @@ module flow_controller (
     assign pc_src_optn_o   = flow_change_detected && !is_halt_i;
 
     // 4. Target Selection
-    // JALR requires clearing the LSB (Standard RISC-V Spec). Kinda useless, as we are limiting Inst Mem to PC[31:2] anyway.
+    // JALR requires clearing the LSB (Standard RISC-V Spec).
     always_comb begin
         if (is_jalr_i) begin
             final_target_addr_o = alu_target_i & 32'hFFFF_FFFE;

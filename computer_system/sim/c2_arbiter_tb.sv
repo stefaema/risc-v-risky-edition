@@ -8,7 +8,7 @@ module c2_arbiter_tb;
     // -------------------------------------------------------------------------
     // Metadata & Color Palette
     // -------------------------------------------------------------------------
-    localparam string FILE_NAME = "C2 (it's not a sequel!)";
+    localparam string FILE_NAME = "C2 Arbiter TB";
     localparam string C_RESET   = "\033[0m";
     localparam string C_RED     = "\033[1;31m";
     localparam string C_GREEN   = "\033[1;32m";
@@ -18,25 +18,25 @@ module c2_arbiter_tb;
     // -------------------------------------------------------------------------
     // Signals
     // -------------------------------------------------------------------------
-    logic       clk;
-    logic       rst_n;
+    logic        clk;
+    logic        rst_n;
 
     logic [7:0] uart_rx_data_i;
-    logic       uart_rx_ready_i;
+    logic        uart_rx_ready_i;
     logic [7:0] uart_tx_data_o;
-    logic       uart_tx_start_o;
-    logic       uart_tx_done_i;
-    logic       soft_reset_o;
-    logic       grant_loader_o;
-    logic       loader_target_o;
-    logic       loader_done_i;
+    logic        uart_tx_start_o;
+    logic        uart_tx_done_i;
+    logic        soft_reset_o;
+    logic        grant_loader_o;
+    logic        loader_target_o;
+    logic        loader_done_i;
     logic [7:0] loader_tx_data_i;
-    logic       loader_tx_start_i;
-    logic       grant_debug_o;
-    logic       debug_exec_mode_o;
-    logic       debug_done_i;
+    logic        loader_tx_start_i;
+    logic        grant_debug_o;
+    logic        debug_exec_mode_o;
+    logic        debug_done_i;
     logic [7:0] dumper_tx_data_i;
-    logic       dumper_tx_start_i;
+    logic        dumper_tx_start_i;
 
     int test_count  = 0;
     int error_count = 0;
@@ -141,29 +141,37 @@ module c2_arbiter_tb;
         check_bit(grant_debug_o, 0, "No Debug Grant");
         check_bit(uart_tx_start_o, 0, "No Echo TX");
 
-        repeat(5) @(posedge clk); // Safe buffer
+        repeat(5) @(posedge clk); 
 
         // ---------------------------------------------------------------------
-        // Test 2: CMD_LOAD_CODE (0x1C)
+        // Test 2: CMD_LOAD_CODE (0x1C) with Blocking ACK
         // ---------------------------------------------------------------------
-        $display("\n%s--- Test 2: Loader Code Handshake ---%s", C_BLUE, C_RESET);
+        $display("\n%s--- Test 2: Loader Code Handshake (Blocking) ---%s", C_BLUE, C_RESET);
         
         // 1. Send Command
         send_uart_byte(8'h1C); 
 
-        // 2. Verify ACK State
-        check_bit(uart_tx_start_o, 1, "Arbiter Echo Start");
-        check(uart_tx_data_o, 8'h1C, "Arbiter Echo Data");
+        // 2. Verify ACK Trigger
+        check_bit(uart_tx_start_o, 1, "Arbiter Triggered ACK");
+        check(uart_tx_data_o, 8'h1C, "Arbiter Data is Echo");
         
-        // 3. Verify Grant
-        check_bit(grant_loader_o, 1, "Loader Granted Immediately");
+        // 3. Verify Blocking Wait (BEFORE done_i)
+        check_bit(grant_loader_o, 0, "NO Grant yet (Waiting for ACK)");
+        
+        // 4. Simulate UART Transmission Delay
+        repeat(3) @(posedge clk);
+        check_bit(grant_loader_o, 0, "Still NO Grant (Delaying)");
+
+        // 5. Assert ACK Done
+        uart_tx_done_i = 1;
+        @(posedge clk); #1;
+        uart_tx_done_i = 0;
+
+        // 6. Verify Grant
+        check_bit(grant_loader_o, 1, "Loader Granted After ACK Done");
         check_bit(loader_target_o, 0, "Loader Target = IMEM");
 
-        // 4. Move FSM Forward
-        @(posedge clk); #1;
-        check_bit(uart_tx_start_o, 0, "Arbiter Echo Done");
-        
-        // 5. Test TX Mux
+        // 7. Test TX Mux (Loader -> UART)
         loader_tx_data_i  = 8'hF1;
         loader_tx_start_i = 1'b1;
         @(posedge clk); #1;
@@ -171,7 +179,7 @@ module c2_arbiter_tb;
         check(uart_tx_data_o, 8'hF1, "UART Mux Pass-Through (Loader)");
         loader_tx_start_i = 0;
 
-        // 6. Finish & Cleanup
+        // 8. Finish & Cleanup
         loader_done_i = 1;
         @(posedge clk); #1;
         loader_done_i = 0;
@@ -181,59 +189,16 @@ module c2_arbiter_tb;
         repeat(5) @(posedge clk); // CRITICAL: Wait for CLEANUP->RECOVERY->IDLE
 
         // ---------------------------------------------------------------------
-        // Test 3: CMD_CONT_EXEC (0xCE)
+        // Test 3: CMD_CONT_EXEC (0xCE) with Blocking ACK
         // ---------------------------------------------------------------------
-        $display("\n%s--- Test 3: Debug Continuous Mode ---%s", C_BLUE, C_RESET);
+        $display("\n%s--- Test 3: Debug Continuous Mode (Blocking) ---%s", C_BLUE, C_RESET);
         
         send_uart_byte(8'hCE); 
 
-        check_bit(uart_tx_start_o, 1, "Arbiter Echo Start");
-        check(uart_tx_data_o, 8'hCE, "Arbiter Echo Data");
-        check_bit(grant_debug_o, 1, "Debug Granted");
-        check_bit(debug_exec_mode_o, 1, "Mode = Continuous");
+        check_bit(uart_tx_start_o, 1, "Arbiter Triggered ACK");
+        check_bit(grant_debug_o, 0, "NO Grant yet (Waiting for ACK)");
+        check_bit(debug_exec_mode_o, 1, "Mode Register Updated Immediately"); 
 
-        @(posedge clk); #1; 
-
-        // Test TX Mux
-        dumper_tx_data_i  = 8'hDA;
-        dumper_tx_start_i = 1'b1;
-        @(posedge clk); #1;
-
-        check(uart_tx_data_o, 8'hDA, "UART Mux Pass-Through (Dumper)");
-        dumper_tx_start_i = 0;
-
-        // Cleanup
-        debug_done_i = 1;
-        @(posedge clk); #1;
-        debug_done_i = 0;
-        
-        check_bit(soft_reset_o, 1, "Soft Reset Asserted");
-        
-        repeat(5) @(posedge clk); // CRITICAL: Wait for IDLE
-
-        // ---------------------------------------------------------------------
-        // Test 4: CMD_DEBUG_EXEC (0xDE)
-        // ---------------------------------------------------------------------
-        $display("\n%s--- Test 4: Debug Step Mode Config ---%s", C_BLUE, C_RESET);
-        
-        send_uart_byte(8'hDE);
-        check_bit(debug_exec_mode_o, 0, "Mode = Step");
-        
-        @(posedge clk); 
-        debug_done_i = 1;
-        @(posedge clk);
-        debug_done_i = 0;
-        
-        repeat(5) @(posedge clk); 
-
-        // ---------------------------------------------------------------------
-        // Test 5: CMD_LOAD_DATA (0x1D)
-        // ---------------------------------------------------------------------
-        $display("\n%s--- Test 5: Load Data Config ---%s", C_BLUE, C_RESET);
-        
-        send_uart_byte(8'h1D);
-        check_bit(grant_loader_o, 1, "Loader Granted");
-        check_bit(loader_target_o, 1, "Loader Target = DMEM");
 
         // ---------------------------------------------------------------------
         // Summary

@@ -168,8 +168,8 @@ module loader_unit (
                 // Assert Write Enable for 1 cycle
                 mem_write_enable_o = 1'b1;
                 
-                // Advance Address (Word-Addressable: +1)
-                next_addr = current_addr + 1;
+                // Advance Address (Address increments by 4 for 32-bit words)
+                next_addr = current_addr + 4;
                 
                 // Update Progress
                 next_words_processed_count = words_processed_count + 1;

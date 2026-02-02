@@ -10,7 +10,7 @@ module riscv_core (
 
     // Flow Control
     input  logic        global_stall_i,
-    input  logic        global_flush_i,
+    input  logic        soft_reset_i,
 
     // Instruction Memory Interface
     output logic [31:0] instr_mem_addr_o,
@@ -163,9 +163,8 @@ module riscv_core (
     program_counter_reg #(.PC_WIDTH(32)) pc_reg_inst (
         .clk            (clk_i),
         .rst_n          (rst_ni),
-        .write_en_i     (pc_write_en),
-        .global_stall_i (global_stall_i),
-        .global_flush_i (global_flush_i),
+        .write_en_i     (pc_write_en && !global_stall_i),
+        .soft_reset_i (soft_reset_i),
         .pc_i           (pc_next_f),
         .pc_o           (pc_f)
     );
@@ -195,9 +194,8 @@ module riscv_core (
         .clk            (clk_i),
         .rst_n          (rst_ni),
         .flush_i        (if_id_flush),
-        .global_flush_i (global_flush_i),
-        .write_en_i     (if_id_write_en),
-        .global_stall_i (global_stall_i),
+        .soft_reset_i (soft_reset_i),
+        .write_en_i     (if_id_write_en && !global_stall_i),
         .data_i         (if_id_data_in),
         .data_o         (if_id_data_out)
     );
@@ -236,7 +234,7 @@ module riscv_core (
     register_file reg_file_inst (
         .clk            (clk_i),
         .rst_n          (rst_ni),
-        .global_flush_i (global_flush_i),
+        .soft_reset_i (soft_reset_i),
         .rs1_addr_i     (rs1_addr_d),
         .rs2_addr_i     (rs2_addr_d),
         .rs_dbg_addr_i  (rs_dbg_addr_i), // Debug Port Input
@@ -287,9 +285,8 @@ module riscv_core (
         .clk            (clk_i),
         .rst_n          (rst_ni),
         .flush_i        (id_ex_flush),
-        .global_flush_i (global_flush_i),
-        .write_en_i     (id_ex_write_en),
-        .global_stall_i (global_stall_i),
+        .soft_reset_i (soft_reset_i),
+        .write_en_i     (id_ex_write_en && !global_stall_i),
         .data_i         (id_ex_data_in),
         .data_o         (id_ex_data_out)
     );
@@ -362,7 +359,7 @@ module riscv_core (
     );
 
     // Branch Target Adder (PC + Imm)
-    adder #(.WIDTH(32)) imm_pc_adder_inst (
+    adder #(.ADDER_WIDTH(32)) imm_pc_adder_inst (
         .adder_op1_i (pc_e),
         .adder_op2_i (imm_e),
         .sum_o       (pc_imm_target_e)
@@ -401,9 +398,8 @@ module riscv_core (
         .clk            (clk_i),
         .rst_n          (rst_ni),
         .flush_i        (1'b0), 
-        .global_flush_i (global_flush_i),
-        .write_en_i     (1'b1), 
-        .global_stall_i (global_stall_i),
+        .soft_reset_i (soft_reset_i),
+        .write_en_i     (!global_stall_i), 
         .data_i         (ex_mem_data_in),
         .data_o         (ex_mem_data_out)
     );
@@ -432,7 +428,7 @@ module riscv_core (
 
     memory_range_tracker mem_tracker_inst (
         .clk            (clk_i),
-        .global_flush_i (global_flush_i),
+        .soft_reset_i (soft_reset_i),
         .mem_write_en   (mem_write_m),
         .addr_in_use_i  (alu_result_m),
         .min_addr_o     (tracker_min_addr),
@@ -463,9 +459,8 @@ module riscv_core (
         .clk            (clk_i),
         .rst_n          (rst_ni),
         .flush_i        (1'b0),
-        .global_flush_i (global_flush_i),
-        .write_en_i     (1'b1),
-        .global_stall_i (global_stall_i),
+        .soft_reset_i (soft_reset_i),
+        .write_en_i     (!global_stall_i),
         .data_i         (mem_wb_data_in),
         .data_o         (mem_wb_data_out)
     );
