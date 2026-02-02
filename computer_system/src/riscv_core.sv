@@ -236,6 +236,7 @@ module riscv_core (
     register_file reg_file_inst (
         .clk            (clk_i),
         .rst_n          (rst_ni),
+        .global_flush_i (global_flush_i),
         .rs1_addr_i     (rs1_addr_d),
         .rs2_addr_i     (rs2_addr_d),
         .rs_dbg_addr_i  (rs_dbg_addr_i), // Debug Port Input

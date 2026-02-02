@@ -14,6 +14,7 @@ module register_file_tb;
     logic        clk;
     logic        rst_n;
     logic [4:0]  rs1_addr_i, rs2_addr_i, rd_addr_i, rs_dbg_addr_i;
+    logic global_flush_i;
     logic [31:0] write_data_i;
     logic        reg_write_en;
     logic [31:0] rs1_data_o, rs2_data_o, rs_dbg_data_o;
@@ -55,6 +56,7 @@ module register_file_tb;
         reg_write_en = 0;
         rs1_addr_i = 0; rs2_addr_i = 0; rd_addr_i = 0; write_data_i = 0;
         rs_dbg_addr_i = 0;
+        global_flush_i = 0;
         #15; 
         rst_n = 1;
         

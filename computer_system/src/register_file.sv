@@ -14,6 +14,7 @@ module register_file #(
     input  logic        rst_n,
     
     // Read Ports
+    input  logic global_flush_i,
     input  logic [4:0]  rs1_addr_i,
     input  logic [4:0]  rs2_addr_i,
     input  logic [4:0]  rs_dbg_addr_i, // For debug purposes
@@ -43,6 +44,11 @@ module register_file #(
     always_ff @(negedge clk or negedge rst_n) begin // Active low clk in order to avoid data hazards
         if (!rst_n) begin
             // Reset all registers to 0
+            for (i = 0; i < 32; i++) begin
+                reg_file[i] <= 32'b0;
+            end
+        end else if (global_flush_i) begin
+            // On global flush, reset all registers to 0
             for (i = 0; i < 32; i++) begin
                 reg_file[i] <= 32'b0;
             end
