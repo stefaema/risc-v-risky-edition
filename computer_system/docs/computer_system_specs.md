@@ -403,14 +403,30 @@ To avoid routing 1024 wires (`32 x 32`), this unit iterates sequentially.
 *   **Transmission:** The 32-bit `rf_dbg_data_i` is split into 4 bytes (LSB first) and sent via UART.
 *   **Total Payload:** 128 Bytes.
 
-## 9.4. Pipeline State Serialization
-Pipeline registers are packed into fixed-width byte structures. Bit-fields from the `core_microarch_specs` are concatenated and padded to the nearest byte boundary.
+### 9.4. Pipeline State Serialization
 
-*   **IF/ID:** 64 bits $\rightarrow$ 8 Bytes.
-*   **ID/EX:** ~167 bits $\rightarrow$ Padded to 21 Bytes. Includes Control Bus, PC, RS1/RS2 Data, Imm, and Metadata.
-*   **EX/MEM:** ~110 bits $\rightarrow$ Padded to 14 Bytes. Includes ALU Result, RS2 Data, and PC+4.
-*   **MEM/WB:** ~105 bits $\rightarrow$ Padded to 14 Bytes. Includes Final Result and Load Data.
-*   **Hazard Flags:** 2 Bytes containing stall, flush, and forwarding status.
+Pipeline registers are packed into fixed-width byte structures within the Dump Unit. To ensure optimal software parsing speed and 32-bit alignment, all payloads are padded to full 32-bit word boundaries.
+
+* **Hazard Flags (4 Bytes):**
+* **Byte 0:** `[4]ID_Flush`, `[3]IF_Flush`, `[2]EX_Stall`, `[1]ID_Stall`, `[0]PC_Stall`.
+* **Byte 1:** `[3:2]Forward_A_Optn`, `[1:0]Forward_B_Optn`.
+* **Bytes 2-3:** Padding (`0x0000`).
+
+
+* **IF/ID (12 Bytes):**
+* Includes `PC` (4B), `Instruction` (4B), and `PC+4` (4B).
+
+
+* **ID/EX (28 Bytes):**
+* Includes `Control_Bus` (2B + 2B Pad), `PC` (4B), `PC+4` (4B), `RS1_Data` (4B), `RS2_Data` (4B), `Immediate` (4B), and `Metadata` (4B).
+
+
+* **EX/MEM (16 Bytes):**
+* Includes `Control_Bus` & `Metadata` (2B + 2B Pad), `ALU_Result` (4B), `RS2_Data` (4B), and `PC+4` (4B).
+
+
+* **MEM/WB (16 Bytes):**
+* Includes `Control_Bus` & `Metadata` (2B + 2B Pad), `ALU_Result` (4B), `Mem_Read_Data` (4B), and `PC+4` (4B).
 
 ## 9.5. Data Memory Optimization
 The unit implements two distinct strategies based on `dump_mem_mode_i`.
@@ -425,9 +441,9 @@ The unit implements two distinct strategies based on `dump_mem_mode_i`.
 ### 9.5.2. Step Mode (Differential)
 *   **Logic:** The unit inspects the **MEM/WB** pipeline register state (specifically `mem_write_en` and `alu_result`).
 *   **Protocol:**
-    *   If `mem_write_en` is High: Send `Flag=1` (1 Byte), then `Address` (4 Bytes), then `Data` (4 Bytes).
-    *   If `mem_write_en` is Low: Send `Flag=0` (1 Byte).
-*   **Benefit:** Reduces payload from ~4KB (full RAM) to just 1-9 bytes per step.
+    *   If `mem_write_en` is High: Send `Flag=1` (4 Bytes), then `Address` (4 Bytes), then `Data` (4 Bytes).
+    *   If `mem_write_en` is Low: Send `Flag=0` (4 Bytes).
+
 
 
 ## 9.6. Finite State Machine (FSM)
@@ -502,15 +518,21 @@ Initiated by `RSP_DUMP_ALERT` (0xDA). All multi-byte values are sent **Little En
 | ... | ... | ... |
 | 32 | 4 Bytes | Register x31 |
 
-### 10.5.3. Pipeline Dump (Fixed 59 Bytes)
+### 10.5.3. Pipeline Dump (Fixed 76 Bytes)
 
-| Section | Size | Fields Included (Packed) |
-| :--- | :--- | :--- |
-| **Hazard** | 2 Bytes | **Byte 0 (Control):** `[4]ID_Flush`, `[3]IF_Flush`, `[2]EX_Stall`, `[1]ID_Stall`, `[0]PC_Stall` <br> **Byte 1 (Forward):** `[3:2]Forward_A_Optn`, `[1:0]Forward_B_Optn` |
-| **IF/ID** | 8 Bytes | `Inst` (4B), `PC` (4B) |
-| **ID/EX** | 21 Bytes | `Ctrl_Bus` (2B), `PC` (4B), `RS1_Data` (4B), `RS2_Data` (4B), `Imm` (4B), `Metadata` (3B) |
-| **EX/MEM** | 14 Bytes | `Ctrl_Bus` (1B), `ALU_Result` (4B), `RS2_Data` (4B), `PC+4` (4B), `Metadata` (1B) |
-| **MEM/WB** | 14 Bytes | `Ctrl_Bus` (1B), `Final_Data` (4B), `PC+4` (4B), `Metadata` (1B), `Padding` (4B) |
+The following table defines the exact bit-to-byte mapping for the UART serialization stream. All fields are Little-Endian. Every major section starts on a 4-byte boundary.
+
+| Section | Offset | Size | Fields Included (Word-Aligned Mapping) |
+| --- | --- | --- | --- |
+| **Hazard** | **0x00** | **4 Bytes** | **Byte 0:** Status Flags<br>**Byte 1:** Forwarding Ops<br><br>**Bytes 2-3:** Padding (`0x0000`) |
+| **IF/ID** | **0x04** | **12 Bytes** | `PC` (4B), `Inst` (4B), `PC+4` (4B) |
+| **ID/EX** | **0x10** | **28 Bytes** | `Ctrl` (2B+Pad), `PC` (4B), `PC+4` (4B), `RS1` (4B), `RS2` (4B), `Imm` (4B), `Meta` (4B) |
+| **EX/MEM** | **0x2C** | **16 Bytes** | `Ctrl_Meta` (2B+Pad), `ALU_Res` (4B), `RS2_Data` (4B), `PC+4` (4B) |
+| **MEM/WB** | **0x3C** | **16 Bytes** | `Ctrl_Meta` (2B+Pad), `ALU_Res` (4B), `Mem_Data` (4B), `PC+4` (4B) |
+
+**Total Dump Size:** **76 Bytes** (0x00 to 0x4B).
+
+
 
 ### 10.5.4. Memory Dump (Variable)
 
@@ -524,6 +546,6 @@ Initiated by `RSP_DUMP_ALERT` (0xDA). All multi-byte values are sent **Little En
 **Case B: Step Mode (`Mode == 0x00`)**
 | Sequence | Size | Content |
 | :--- | :--- | :--- |
-| 1 | 1 Byte | **Write Flag:** `0x01` if write occurred, `0x00` otherwise. |
+| 1 | 4 Bytes | **Write Flag:** `0x01` if write occurred, `0x00` otherwise. |
 | 2 (If Flag=1) | 4 Bytes | `Write_Address` |
 | 3 (If Flag=1) | 4 Bytes | `Write_Data` |

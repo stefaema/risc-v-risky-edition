@@ -13,9 +13,9 @@ hd_visual/
 
 # --- Output Folders (Build) ---
 # We ignore where Vivado builds the project and bitstreams
-work/
-build/
-bin/
+/computer_system/work/
+/computer_system/build/
+/computer_system/bin/
 
 # --- IPs (Optional) ---
 # If you want to ignore all IP contents except the .xci files, uncomment the following lines:
@@ -32,4 +32,4 @@ bin/
 Thumbs.db
 
 # --- Custom ---
-/others
+/computer_system/others/

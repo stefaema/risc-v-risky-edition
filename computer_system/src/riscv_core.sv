@@ -29,15 +29,15 @@ module riscv_core (
     input  logic [4:0]  rs_dbg_addr_i,
     output logic [31:0] rs_dbg_data_o,
     
-    output logic [31:0] core_pc_o, // Current PC (Fetch) for Top Level Muxing
+    output logic [31:0] core_pc_o, // Current PC (Fetch) 
     output logic        core_halted_o,
 
     // Flattened Debug Taps
-    output logic [63:0] if_id_flat_o,
-    output logic [167:0] id_ex_flat_o,
-    output logic [111:0] ex_mem_flat_o,
-    output logic [111:0] mem_wb_flat_o,
-    output logic [15:0] hazard_status_o
+    output logic [95:0]  if_id_flat_o,  // Width: 96
+    output logic [196:0] id_ex_flat_o,  // Width: 197
+    output logic [109:0] ex_mem_flat_o, // Width: 110
+    output logic [104:0] mem_wb_flat_o, // Width: 105
+    output logic [15:0]  hazard_status_o
 );
 
     // =========================================================================
@@ -54,7 +54,7 @@ module riscv_core (
     // --- Decode Stage (ID) ---
     logic [31:0] pc_d;
     logic [31:0] instr_d;
-    logic [31:0] pc_plus_4_d; // Passed for Linking
+    logic [31:0] pc_plus_4_d; 
 
     logic [6:0]  opcode_d;
     logic [4:0]  rd_addr_d;
@@ -121,7 +121,7 @@ module riscv_core (
     logic [31:0] ram_write_data_m; // Aligned
     logic [31:0] final_read_data_m; // From Mem Interface
     
-    // Range Tracker Outputs (Internal to Core wrapper but logic exists)
+    // Range Tracker Outputs
     logic [31:0] tracker_min_addr;
     logic [31:0] tracker_max_addr;
 
@@ -186,11 +186,12 @@ module riscv_core (
     // Pipeline Register: IF -> ID
     // =========================================================================
     
-    // Logic to pack IF data
-    logic [63:0] if_id_data_in, if_id_data_out;
-    assign if_id_data_in = {pc_f, instr_f};
+    // Payload: PC, Instr, PC+4
+    // Width: 32 + 32 + 32 = 96 bits
+    logic [95:0] if_id_data_in, if_id_data_out;
+    assign if_id_data_in = {pc_f, instr_f, pc_plus_4_f};
 
-    pipeline_register #(.WIDTH(64)) if_id_reg (
+    pipeline_register #(.WIDTH(96)) if_id_reg (
         .clk            (clk_i),
         .rst_n          (rst_ni),
         .flush_i        (if_id_flush),
@@ -202,7 +203,7 @@ module riscv_core (
     );
 
     // Unpack IF/ID
-    assign {pc_d, instr_d} = if_id_data_out;
+    assign {pc_d, instr_d, pc_plus_4_d} = if_id_data_out;
 
     // =========================================================================
     // Stage 2: Instruction Decode (ID)
@@ -269,24 +270,19 @@ module riscv_core (
     // Pipeline Register: ID -> EX
     // =========================================================================
     
-    // Structs would be cleaner, but using packed vectors for portability/style
-    // Payload: Controls (13b) + Data (128b) + Metadata (22b) -> Total ~163 bits
-    // Control Bus: {is_halt, is_branch, is_jal, is_jalr, mem_we, mem_re, reg_we, rd_src_optn, alu_intent, alu_src_optn}
-    
-    logic [162:0] id_ex_data_in, id_ex_data_out;
+    // Payload: Ctrl (12) + Data (160) + Meta (25) = 197 bits
+    logic [196:0] id_ex_data_in, id_ex_data_out;
     
     assign id_ex_data_in = {
-        // Controls (13 bits)
-        is_halt_d, is_branch_d, is_jal_d, is_jalr_d,
-        mem_write_d, mem_read_d, reg_write_d,
-        rd_src_optn_d, alu_intent_d, alu_src_optn_d,
-        // Data (128 bits)
-        pc_d, rs1_data_d, rs2_data_d, imm_d,
-        // Metadata (22 bits)
+        // Controls (12 bits)
+        reg_write_d, mem_write_d, mem_read_d, alu_src_optn_d, alu_intent_d, rd_src_optn_d, is_branch_d, is_jal_d, is_jalr_d, is_halt_d,
+        // Data (160 bits)
+        pc_d, pc_plus_4_d, rs1_data_d, rs2_data_d, imm_d,
+        // Metadata (25 bits)
         rs1_addr_d, rs2_addr_d, rd_addr_d, funct3_d, funct7_d
     };
 
-    pipeline_register #(.WIDTH(163)) id_ex_reg (
+    pipeline_register #(.WIDTH(197)) id_ex_reg (
         .clk            (clk_i),
         .rst_n          (rst_ni),
         .flush_i        (id_ex_flush),
@@ -299,10 +295,8 @@ module riscv_core (
 
     // Unpack ID/EX
     assign {
-        is_halt_e, is_branch_e, is_jal_e, is_jalr_e,
-        mem_write_e, mem_read_e, reg_write_e,
-        rd_src_optn_e, alu_intent_e, alu_src_optn_e,
-        pc_e, rs1_data_e, rs2_data_e, imm_e,
+        reg_write_e, mem_write_e, mem_read_e, alu_src_optn_e, alu_intent_e, rd_src_optn_e, is_branch_e, is_jal_e, is_jalr_e, is_halt_e,
+        pc_e, pc_plus_4_e, rs1_data_e, rs2_data_e, imm_e,
         rs1_addr_e, rs2_addr_e, rd_addr_e, funct3_e, funct7_e
     } = id_ex_data_out;
 
@@ -349,7 +343,7 @@ module riscv_core (
         .data_o (alu_op2_val_e)
     );
 
-    // ALU Controller
+    // ALU Controller (Decodes funct3/7 + Intent to the final selected ALU Operation)
     alu_controller alu_ctrl_inst (
         .alu_intent      (alu_intent_e),
         .funct3_i        (funct3_e),
@@ -389,30 +383,25 @@ module riscv_core (
         .final_target_addr_o (final_target_addr_e)
     );
 
-    // Helper for linking
-    assign pc_plus_4_e = pc_e + 32'd4;
-
     // =========================================================================
     // Pipeline Register: EX -> MEM
     // =========================================================================
     
-    // Payload: Ctrl (5b) + Data (96b) + Meta (8b) -> ~109 bits
-    // Ctrl: {is_halt, mem_we, mem_re, reg_we, rd_src}
-    
-    logic [108:0] ex_mem_data_in, ex_mem_data_out;
+    // Payload: Ctrl (6) + Data (96) + Meta (8) = 110 bits
+    logic [109:0] ex_mem_data_in, ex_mem_data_out;
 
     assign ex_mem_data_in = {
-        is_halt_e, mem_write_e, mem_read_e, reg_write_e, rd_src_optn_e,
-        alu_result_e, forward_b_val_e, pc_plus_4_e, // Store data is fwd_b_val
+        reg_write_e, mem_write_e, mem_read_e, rd_src_optn_e, is_halt_e,
+        alu_result_e, forward_b_val_e, pc_plus_4_e, 
         rd_addr_e, funct3_e
     };
 
-    pipeline_register #(.WIDTH(109)) ex_mem_reg (
+    pipeline_register #(.WIDTH(110)) ex_mem_reg (
         .clk            (clk_i),
         .rst_n          (rst_ni),
-        .flush_i        (1'b0), // No flush logic for EX/MEM
+        .flush_i        (1'b0), 
         .global_flush_i (global_flush_i),
-        .write_en_i     (1'b1), // Always enabled (except global)
+        .write_en_i     (1'b1), 
         .global_stall_i (global_stall_i),
         .data_i         (ex_mem_data_in),
         .data_o         (ex_mem_data_out)
@@ -420,7 +409,7 @@ module riscv_core (
 
     // Unpack EX/MEM
     assign {
-        is_halt_m, mem_write_m, mem_read_m, reg_write_m, rd_src_optn_m,
+        reg_write_m, mem_write_m, mem_read_m, rd_src_optn_m, is_halt_m,
         alu_result_m, store_data_m, pc_plus_4_m,
         rd_addr_m, funct3_m
     } = ex_mem_data_out;
@@ -460,13 +449,11 @@ module riscv_core (
     // Pipeline Register: MEM -> WB
     // =========================================================================
 
-    // Payload: Ctrl (4b) + Data (96b) + Meta (5b) -> 105 bits
-    // Ctrl: {is_halt, reg_we, rd_src}
-    
+    // Payload: Ctrl (4) + Data (96) + Meta (5) = 105 bits
     logic [104:0] mem_wb_data_in, mem_wb_data_out;
 
     assign mem_wb_data_in = {
-        is_halt_m, reg_write_m, rd_src_optn_m,
+        reg_write_m, rd_src_optn_m, is_halt_m,
         alu_result_m, final_read_data_m, pc_plus_4_m,
         rd_addr_m
     };
@@ -484,7 +471,7 @@ module riscv_core (
 
     // Unpack MEM/WB
     assign {
-        is_halt_w, reg_write_w, rd_src_optn_w,
+        reg_write_w, rd_src_optn_w, is_halt_w,
         alu_result_w, final_read_data_w, pc_plus_4_w,
         rd_addr_w
     } = mem_wb_data_out;
@@ -505,70 +492,25 @@ module riscv_core (
     assign core_halted_o = is_halt_w;
 
     // =========================================================================
-    // Debug & Flattening Assignments
+    // Debug Assignments (Direct Register Mapping)
     // =========================================================================
 
-    // IF/ID Flat (8 Bytes): [63:32] Inst, [31:0] PC
-    assign if_id_flat_o = {instr_f, pc_f}; 
+    // IF/ID Flat (96 bits)
+    assign if_id_flat_o = if_id_data_out; 
 
-    // ID/EX Flat (Packed ~21 Bytes)
-    // Map based on spec expectations: Ctrl, PC, RS1, RS2, Imm, Meta
-    // Control Bus (2B): Pad {is_halt, is_branch, is_jal, is_jalr, mem_we, mem_re, reg_we, rd_src(2), alu_intent(2), alu_src} to 16 bits
-    logic [15:0] id_ex_ctrl_flat;
-    assign id_ex_ctrl_flat = {3'b0, is_halt_d, is_branch_d, is_jal_d, is_jalr_d, mem_write_d, mem_read_d, reg_write_d, rd_src_optn_d, alu_intent_d, alu_src_optn_d};
-    
-    // Metadata (3B): rs1(5), rs2(5), rd(5), funct3(3), funct7(7) -> 25 bits. 
-    // Truncating upper bit of funct7 or packing tightly? Spec says "Padded to 21 Bytes".
-    // Let's pack naturally:
-    assign id_ex_flat_o = {
-        id_ex_ctrl_flat,    // 16 bits
-        pc_d,               // 32 bits
-        rs1_data_d,         // 32 bits
-        rs2_data_d,         // 32 bits
-        imm_d,              // 32 bits
-        7'b0,               // Padding
-        rs1_addr_d, rs2_addr_d, rd_addr_d, funct3_d, funct7_d[5] // Minimal metadata (using bit 30 of funct7)
-    };
+    // ID/EX Flat (197 bits)
+    assign id_ex_flat_o = id_ex_data_out;
 
-    // EX/MEM Flat (14 Bytes)
-    // Ctrl(1B), ALU(4B), RS2(4B), PC+4(4B), Meta(1B)
-    logic [7:0] ex_mem_ctrl_flat;
-    assign ex_mem_ctrl_flat = {3'b0, is_halt_e, mem_write_e, mem_read_e, reg_write_e, rd_src_optn_e}; // 1+1+1+1+2 = 6 bits
-    
-    assign ex_mem_flat_o = {
-        ex_mem_ctrl_flat,   // 8 bits
-        alu_result_e,       // 32 bits
-        forward_b_val_e,    // 32 bits (Store Data)
-        pc_plus_4_e,        // 32 bits
-        3'b0, rd_addr_e     // 8 bits
-    };
+    // EX/MEM Flat (110 bits)
+    assign ex_mem_flat_o = ex_mem_data_out; 
 
-    // MEM/WB Flat (14 Bytes)
-    // Ctrl(1B), Final(4B), PC+4(4B), Meta(1B), Padding(4B)
-    logic [7:0] mem_wb_ctrl_flat;
-    assign mem_wb_ctrl_flat = {4'b0, is_halt_m, reg_write_m, rd_src_optn_m}; // 1+1+2 = 4 bits
+    // MEM/WB Flat (105 bits)
+    assign mem_wb_flat_o = mem_wb_data_out;
 
-    assign mem_wb_flat_o = {
-        mem_wb_ctrl_flat,   // 8 bits
-        final_rd_data_w,    // 32 bits (Wait, spec says "Final Result") -> Using Mux Output here? No, spec says MEM/WB payload. 
-                            // The Pipeline Register carries ALU and MEM Read. 
-                            // Spec 10.5.3: "MEM/WB... Final_Data". This usually implies the data AFTER the mux.
-                            // But the "Pipeline Register" taps usually show what is IN the register.
-                            // I will output what is IN the register (ALU Result) or Construct the final data.
-                            // Since it's for Debug Dump, "Final_Data" usually means what was written.
-                            // I will connect this to 'final_rd_data_w' which is combinational output of WB stage.
-        final_rd_data_w,
-        pc_plus_4_m,        // 32 bits
-        3'b0, rd_addr_m,    // 8 bits
-        32'b0               // Padding
-    };
-
-    // Hazard Status (2 Bytes)
-    // Byte 0: [4]ID_Flush, [3]IF_Flush, [2]EX_Stall, [1]ID_Stall, [0]PC_Stall
-    // Note: My stall signals are enable (1=Run), so Stall = !Enable.
+    // Hazard Status (16 bits)
     assign hazard_status_o = {
         6'b0, forward_a_optn, forward_b_optn, // Byte 1
-        3'b0, id_ex_flush, if_id_flush, !1'b1, !id_ex_write_en, !pc_write_en // Byte 0 (EX Stall hardwired 0)
+        3'b0, id_ex_flush, if_id_flush, !1'b1, !id_ex_write_en, !pc_write_en // Byte 0
     };
 
 endmodule
