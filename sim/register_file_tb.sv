@@ -13,10 +13,10 @@ module register_file_tb;
     // --- DUT Signals ---
     logic        clk;
     logic        rst_n;
-    logic [4:0]  rs1_addr_i, rs2_addr_i, rd_addr_i;
+    logic [4:0]  rs1_addr_i, rs2_addr_i, rd_addr_i, rs_dbg_addr_i;
     logic [31:0] write_data_i;
     logic        reg_write_en;
-    logic [31:0] read_data1_o, read_data2_o;
+    logic [31:0] rs1_data_o, rs2_data_o, rs_dbg_data_o;
 
     int test_count = 0;
     int error_count = 0;
@@ -54,13 +54,14 @@ module register_file_tb;
         rst_n = 0;
         reg_write_en = 0;
         rs1_addr_i = 0; rs2_addr_i = 0; rd_addr_i = 0; write_data_i = 0;
+        rs_dbg_addr_i = 0;
         #15; 
         rst_n = 1;
         
         // - Test 1: Reset State
         rs1_addr_i = 1;
         #1; 
-        check(32'h0, read_data1_o, "Check Reset State (x1)");
+        check(32'h0, rs1_data_o, "Check Reset State (x1)");
 
         $display("\n%s[TEST PHASE 2] Write & Read Operations%s", C_BLUE, C_RESET);
         
@@ -76,7 +77,7 @@ module register_file_tb;
         reg_write_en = 0;
         rs1_addr_i = 1; // Set read address NOW
         #1;             // WAIT for logic to settle
-        check(32'hDEADBEEF, read_data1_o, "Read x1 after Write");
+        check(32'hDEADBEEF, rs1_data_o, "Read x1 after Write");
 
         // - Test 3: Dual Port Read
         // Setup: Write second value
@@ -91,8 +92,8 @@ module register_file_tb;
         rs1_addr_i = 1; // Read Port 1 -> x1 (DEADBEEF)
         rs2_addr_i = 2; // Read Port 2 -> x2 (CAFEBABE)
         #1;             // WAIT for logic to settle
-        check(32'hDEADBEEF, read_data1_o, "Dual Read Port 1 (x1)");
-        check(32'hCAFEBABE, read_data2_o, "Dual Read Port 2 (x2)");
+        check(32'hDEADBEEF, rs1_data_o, "Dual Read Port 1 (x1)");
+        check(32'hCAFEBABE, rs2_data_o, "Dual Read Port 2 (x2)");
 
         $display("\n%s[TEST PHASE 3] x0 Invariant Check%s", C_BLUE, C_RESET);
         
@@ -108,7 +109,7 @@ module register_file_tb;
         reg_write_en = 0;
         rs1_addr_i = 0; // Set read addr to x0
         #1;             // WAIT for logic to settle
-        check(32'h0, read_data1_o, "Write to x0 Ignored");
+        check(32'h0, rs1_data_o, "Write to x0 Ignored");
 
         // Summary Footer
         $display("\n%s-------------------------------------------------------%s", C_BLUE, C_RESET);

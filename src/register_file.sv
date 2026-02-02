@@ -16,8 +16,10 @@ module register_file #(
     // Read Ports
     input  logic [4:0]  rs1_addr_i,
     input  logic [4:0]  rs2_addr_i,
-    output logic [REG_WIDTH-1:0] read_data1_o,
-    output logic [REG_WIDTH-1:0] read_data2_o,
+    input  logic [4:0]  rs_dbg_addr_i, // For debug purposes
+    output logic [REG_WIDTH-1:0] rs1_data_o,
+    output logic [REG_WIDTH-1:0] rs2_data_o,
+    output logic [REG_WIDTH-1:0] rs_dbg_data_o,
 
     // Write Port
     input  logic [4:0]  rd_addr_i,
@@ -32,8 +34,10 @@ module register_file #(
 
     // Read Logic (Asynchronous, pure combinational)
     // RISC-V Requirement: Register x0 is always 0.
-    assign read_data1_o = (rs1_addr_i == 5'b0) ? 32'b0 : reg_file[rs1_addr_i];
-    assign read_data2_o = (rs2_addr_i == 5'b0) ? 32'b0 : reg_file[rs2_addr_i];
+    assign rs1_data_o = (rs1_addr_i == 5'b0) ? 32'b0 : reg_file[rs1_addr_i];
+    assign rs2_data_o = (rs2_addr_i == 5'b0) ? 32'b0 : reg_file[rs2_addr_i];
+    assign rs_dbg_data_o = (rs_dbg_addr_i == 5'b0) ? 32'b0 : reg_file[rs_dbg_addr_i];
+
 
     // Write Logic (Synchronous)
     always_ff @(negedge clk or negedge rst_n) begin // Active low clk in order to avoid data hazards

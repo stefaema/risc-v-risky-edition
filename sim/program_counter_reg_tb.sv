@@ -13,7 +13,9 @@ module program_counter_reg_tb;
     // --- DUT Signals ---
     logic        clk;
     logic        rst_n;
-    logic        stall_i;
+    logic        write_en_i;
+    logic        global_flush_i;
+    logic        global_stall_i;
     logic [31:0] pc_i;
     logic [31:0] pc_o;
 
@@ -23,7 +25,9 @@ module program_counter_reg_tb;
     program_counter_reg dut (
         .clk     (clk),
         .rst_n   (rst_n),
-        .stall_i (stall_i),
+        .write_en_i (write_en_i),
+        .global_flush_i (global_flush_i),
+        .global_stall_i (global_stall_i),
         .pc_i    (pc_i),
         .pc_o    (pc_o)
     );
@@ -51,7 +55,9 @@ module program_counter_reg_tb;
     initial begin
 
         rst_n   = 0;
-        stall_i = 0;
+        write_en_i = 1;
+        global_flush_i = 0;
+        global_stall_i = 0;
         pc_i    = 32'd0;
 
         $display("\n%s=======================================================%s", C_CYAN, C_RESET);
@@ -78,7 +84,7 @@ module program_counter_reg_tb;
 
         // - Test 3: Stall Activation ---
         @(posedge clk);
-        stall_i = 1;
+        write_en_i = 0;
         pc_i    = 32'h0000_0008;
 
         @(posedge clk);
@@ -87,7 +93,7 @@ module program_counter_reg_tb;
 
         // - Test 4: Stall Release
         @(posedge clk);
-        stall_i = 0;
+        write_en_i = 1;
         // pc_i remains 0x8 from previous setup
 
         @(posedge clk);

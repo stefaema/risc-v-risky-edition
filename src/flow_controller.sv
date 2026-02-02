@@ -1,8 +1,7 @@
 // -----------------------------------------------------------------------------
 // Module: flow_controller
 // Description: Execution Stage Flow Control Unit.
-//              Implements Static Not-Taken prediction logic, branch condition 
-//              evaluation, pipeline flushing, and PC target selection.
+//              Handles Branch/Jump evaluation and Halt propagation.
 // -----------------------------------------------------------------------------
 
 module flow_controller (
@@ -10,50 +9,50 @@ module flow_controller (
     input  logic        is_branch_i,
     input  logic        is_jal_i,
     input  logic        is_jalr_i,
+    input  logic        is_halt_i,       // From Control Unit (ID/EX)
 
     // Data Inputs
     input  logic [2:0]  funct3_i,
-    input  logic        zero_i,
+    input  logic        zero_i,          // From ALU
 
     // Target Address Inputs
     input  logic [31:0] pc_imm_target_i, // From Imm Adder (Branch/JAL)
     input  logic [31:0] alu_target_i,    // From ALU (JALR)
 
     // Outputs
-    output logic        pc_src_optn_o,       // 0: Next Sequential, 1: Redirect
-    output logic        flush_req_o,         // Flushes IF/ID and ID/EX
+    output logic        pc_src_optn_o,       // 0: Next Seq, 1: Redirect
+    output logic        redirect_req_o,      // Signal to Hazard Unit to flush
+    output logic        halt_detected_o,     // Signal to Hazard Unit that halt detected by CU was valid
     output logic [31:0] final_target_addr_o  // Address to fetch next
 );
 
     logic branch_condition_met;
-    logic do_redirect;
+    logic flow_change_detected;
 
-    // 1. Condition Evaluation
-    // Based on RISC-V funct3 codes.
-    // Note: Dossier specifies 'zero' flag. BEQ/BNE are fully supported.
-    // Magnitude comparisons (BLT/BGE) depend on specific ALU implementation
-    // regarding the zero flag in this architecture definition.
+    // 1. Condition Evaluation (Standard RISC-V BEQ/BNE)
     always_comb begin
         case (funct3_i)
             3'b000:  branch_condition_met = (zero_i == 1'b1); // BEQ
             3'b001:  branch_condition_met = (zero_i == 1'b0); // BNE
-            // Default safe handling for unspecified signed/unsigned comparisons
-            // in this simplified dossier context.
             default: branch_condition_met = 1'b0; 
         endcase
     end
 
-    // 2. Prediction Verification (Static Not-Taken)
-    // We redirect (Fail Prediction) if it is a Jump or a Taken Branch.
-    assign do_redirect = is_jal_i | is_jalr_i | (is_branch_i & branch_condition_met);
+    // 2. Flow Change Detection
+    // We redirect if it is a Jump OR a Taken Branch
+    assign flow_change_detected = is_jal_i | is_jalr_i | (is_branch_i & branch_condition_met);
 
     // 3. Output Generation
-    assign pc_src_optn_o = do_redirect;
-    assign flush_req_o   = do_redirect;
+    assign redirect_req_o  = flow_change_detected;
+    assign halt_detected_o = is_halt_i;
+
+    // PC Source Logic:
+    // We only switch the PC Mux to the Target (1) if we need to redirect 
+    // AND we are NOT halting. (Halt takes priority in freezing logic).
+    assign pc_src_optn_o   = flow_change_detected && !is_halt_i;
 
     // 4. Target Selection
-    // JALR requires setting the LSB to 0 (Standard RISC-V Spec).
-    // All other control transfers use the PC + Immediate calculation.
+    // JALR requires clearing the LSB (Standard RISC-V Spec). Kinda useless, as we are limiting Inst Mem to PC[31:2] anyway.
     always_comb begin
         if (is_jalr_i) begin
             final_target_addr_o = alu_target_i & 32'hFFFF_FFFE;

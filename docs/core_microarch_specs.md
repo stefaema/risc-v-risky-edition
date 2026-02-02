@@ -1,6 +1,6 @@
-# Hardware Architecture Dossier: RV32I Pipelined Core
+# Microarchitecture Specification: RV32I Subset Pipelined Core
 
-**Version:** 1.2
+**Version:** 1.3
 **Module:** `riscv_core`
 **Status:** Architecture Definition
 **Target:** FPGA / RTL Simulation
@@ -25,7 +25,7 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 | **2. Decode (ID)** | Decodes instructions, reads Register File, and generates immediate values. |
 | **3. Execute (EX)** | Performs ALU operations, evaluates Branch/Jump conditions, calculates targets, and handles Data Forwarding. |
 | **4. Memory (MEM)** | Interfaces with Data Memory using masking for Byte/Halfword access. |
-| **5. Writeback (WB)** | Commits the final result to the Register File. |
+| **5. Writeback (WB)** | Commits the final result to the Register File. Signals when system Halts |
 
 ---
 
@@ -36,9 +36,9 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 #### `program_counter_reg`
 
 * **Function:** State register holding the current instruction address.
-* **Inputs:** `clk`, `reset`, `stall` (Hazard), `new_pc_in`.
+* **Inputs:** `clk`, `reset`, `write_en`, `global_stall`, `new_pc_in`.
 * **Outputs:** `pc_out` (32-bit).
-* **Logic:** Synchronous update. Holds value if `stall` is active. Reset sets PC to `0x00000000`.
+* **Logic:** Synchronous update. Holds value if `write_enable` is clear or if `global_stall` is set. Reset sets PC to `0x00000000`.
 
 
 
@@ -75,17 +75,19 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 
 #### `instruction_decoder`
 
-* **Function:** Breaks down the raw 32-bit instruction into constituent fields.
-* **Logic:** Combinational slicing.
-* `opcode` [6:0]
-* `rd` [11:7]
-* `funct3`
-* `rs1`
-* `rs2`
-* `funct7`
-* **Inputs:** `instruction_word`
-* **Outputs:** `opcode`, `rs1`, `rs2`, `rd`
+* **Function:** Breaks down the raw 32-bit instruction into constituent fields for downstream processing.
+* **Logic:**
+* **Standard Slicing:** Extracts `rd`, `funct3`, `rs2`, and `funct7` directly from their architecturally defined bit positions.
+* **U-Type Handling (LUI):** The module includes specific decode logic for the `LUI` opcode (`0110111`).
+    * **Mechanism:** When `LUI` is detected, the `rs1` output is forced to `0` (referencing `x0`).
+    * **Rationale:** In the U-Type format, bits `[19:15]` are part of the immediate value, not a source register. Failing to mask this field would result in the processor interpreting immediate data as a register index. This could trigger false positives in the **Forwarding Unit** (detecting a dependency on a non-existent register) and cause incorrect ALU behavior.
+* **Benefit:** By enforcing `rs1 = 0`, the ALU can treat `LUI` as a standard addition (`x0 + Immediate`) without requiring a dedicated "Pass-Through B" operation or additional control multiplexers.
 
+
+
+
+* **Inputs:** `instruction_word`
+* **Outputs:** `opcode`, `rs1`, `rs2`, `rd`, `funct3`, `funct7`
 
 
 #### `control_unit`
@@ -93,21 +95,26 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 * **Function:** Translates Opcode into internal control bus.
 * **Inputs:** `opcode`
 * **Outputs:**
-* `is_branch`, `is_jal`, `is_jalr` (Flow Flags).
-* `mem_write`, `mem_read`.
-* `reg_write`.
-* `rd_src_optn` (Control for WB Mux).
-* `alu_intent` (Generic ALU mode).
-* `alu_src_optn` (Control for ALU Mux).
-
+    * `is_branch`, `is_jal`, `is_jalr` (Flow Flags).
+    * `mem_write`, `mem_read`.
+    * `reg_write`.
+    * `rd_src_optn` (Control for WB Mux).
+    * `alu_intent` (Generic ALU mode).
+    * `alu_src_optn` (Control for ALU Mux).
+    * `is_halt` (1 = `ECALL` / System Stop).
 
 
 #### `register_file`
 
 * **Function:** 32x32-bit storage. `x0` hardwired to 0.
-* **Inputs:** `rs1_addr`, `rs2_addr` (Read Addr), `rd_addr` (Write Addr),  `reg_write_en` (from WB),
-`rd_data`.
-* **Outputs:** `rs1_data`, `rs2_data`.
+* **Inputs:** 
+    - `rs1_addr` (Read Addr's)
+    - `rs2_addr` 
+    - `rs_dbg_addr`
+    - `rd_addr` (Write Addr)
+    - `reg_write_en` (from WB)
+    - `rd_data`.
+* **Outputs:** `rs1_data`, `rs2_data`,`rs_dbg_data`.
 
 
 
@@ -161,11 +168,9 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 
 #### `flow_controller`
 
-* **Function:** Flow Control Unit implementing **Static Not-Taken Prediction**. Handles condition evaluation, pipeline flushing and target selection.
-
-
+* **Function:** Flow Control Unit implementing **Static Not-Taken Prediction**. Handles condition evaluation, target selection, and **Halt Logic**.
 * **Inputs:**
-* Control: `is_branch`, `is_jal`, `is_jalr`.
+* Control: `is_branch`, `is_jal`, `is_jalr`, `is_halt_i` (from ID/EX).
 * Data: `funct3`, `zero` (from `alu`).
 * Targets: `pc_imm_target` (from `pc_imm_adder`), `alu_target` (from `alu`, for JALR).
 
@@ -173,29 +178,30 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 * **Outputs:**
 * `pc_src_optn` (Signal to IF Stage Mux).
 * `final_target_addr` (Address Data).
-* `flush_req` (Signal to Hazard Unit).
+* `redirect_req` (Signal to Hazard Unit indicating a flow change).
+* `halt_detected_o` (Signal to Hazard Unit to inititate System Stop).
 
 
 * **Logic:**
 1. **Condition Evaluation:**
-* Checks `funct3` against the `zero` flag (e.g., `BEQ` takes if `zero == 1`, `BNE` takes if `zero == 0`).
-* result: `branch_condition_met`.
+* Checks `funct3` against the `zero` flag.
+* Result: `branch_condition_met`.
 
 
-2. **Prediction Verification (Static Not-Taken):**
-* The fetch unit effectively predicts "Not Taken" by default (fetching PC+4).
-* A redirection is required if: `is_jal` OR `is_jalr` OR (`is_branch` AND `branch_condition_met`).
-* **Signal:** `do_redirect`.
+2. **Flow Change Detection:**
+* A deviation from sequential flow is detected if: `is_jal` OR `is_jalr` OR (`is_branch` AND `branch_condition_met`).
+* **Signal:** `redirect_req` = `flow_change_detected`. (Indicates the instructions currently in Fetch and Decode are invalid).
 
 
-3. **Output Generation:**
-* `pc_src_optn` = `do_redirect`.
-* `flush_req` = `do_redirect`. (High triggers synchronous clear of **IF/ID** and **ID/EX** pipeline registers, imposing a 2-cycle penalty).
+3. **Halt Handling:**
+* `halt_detected_o` = `is_halt_i`.
 
 
-4. **Target Selection:**
-* If `is_jalr`: `final_target_addr` = `alu_result` & `0xFFFFFFFE` (Clear LSB).
+4. **PC Source & Target Selection:**
+* `pc_src_optn` = `redirect_req` AND (NOT `is_halt_i`). (Only redirect if not halting; Halt freezes PC in place).
+* If `is_jalr`: `final_target_addr` = `alu_target` & `0xFFFFFFFE` (Clear LSB).
 * Else: `final_target_addr` = `pc_imm_target`.
+
 
 ---
 
@@ -216,8 +222,6 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 * **To Data Memory:** `ram_write_data` (Data replicated/aligned for the specific byte lanes).
 * **To Writeback:** `final_read_data` (The requested byte/halfword, sign-extended or zero-extended to 32 bits).
 
-
-
 #### `data_memory`
 
 * **Function:** 32-bit wide Random Access Memory.
@@ -230,6 +234,24 @@ The processor implements a **Harvard Architecture** with five distinct stages.
 
 * **Outputs:**
 * **To data_memory_interface:** `raw_read_data` (The full 32-bit word at the address).
+
+#### `memory_range_tracker`
+
+* **Function:** Monitors memory write operations to maintain a record of the "dirty" memory range. This allows external Modules to perform optimized memory dumps by only transmitting used addresses.
+* **Inputs:**
+    * `clk`: System clock.
+    * `reset`: Synchronous reset (resets limits to default).
+    * `mem_write_en`: Write strobe from the Control Unit (active when a Store instruction is in MEM).
+    * `addr_in_use`: The 32-bit memory address being accessed.
+* **Outputs:**
+    * `min_addr_o`: 32-bit register holding the lowest address written since reset.
+    * `max_addr_o`: 32-bit register holding the highest address written since reset.
+* **Logic:**
+    * Upon **reset**: `min_addr_o` is initialized to `0xFFFFFFFF` and `max_addr_o` to `0x00000000`.
+    * On `mem_write_en`:
+        * If `alu_result < min_addr_o`, update `min_addr_o` with `alu_result`.
+        * If `alu_result > max_addr_o`, update `max_addr_o` with `alu_result`.
+
 
 
 ### 3.5. Stage 5: Writeback (WB)
@@ -254,7 +276,8 @@ These modules act as the state barriers between the combinational logic stages. 
 * **Inputs:**
 * `clk`: System clock.
 * `sync_reset`: Synchronous Clear/Flush signal (High priority). Used for Branch Flushing.
-* `enable`: Write Enable/Stall signal (Low priority). Used for Load-Use Stalls.
+* `write_en`: Write Enable/~Stall signal (Low priority). Used for Load-Use Stalls.
+* `global_stall`
 * `data_i`: Input payload packet.
 
 
@@ -271,42 +294,52 @@ These modules act as the state barriers between the combinational logic stages. 
 
 ### Pipeline Register Specifications
 
-#### `if_id_reg` (Fetch  Decode)
+#### `if_id_reg` (Fetch → Decode)
 
-* **Control:** Stallable (Load-Use), Flushable (Branch Taken).
+* **Control:** 
+    * Stallable (Load-Use): Triggered by **Load-Use Stall**
+    * Flushable (Branch Taken): Triggered by **Branch Redirect** and/or **SystemHalt**
 * **Payload:**
-* `pc_addr`: The address of the instruction (crucial for calculating PC-relative offsets).
-* `instruction_word`: The raw binary fetched from memory.
+    * `pc_addr`: The address of the instruction (crucial for calculating PC-relative offsets).
+    * `instruction_word`: The raw binary fetched from memory.
+    * `pc_plus_four`: The result of the fixed adder. It's needed in WB.
+
+* **Bit Size:**
+    * 96 bits.
+#### `id_ex_reg` (Decode → Execute)
+
+* **Control:**
+    * **Flushable** (Sync Reset): Triggered by **Branch Redirect** or **Load-Use Stall** (Bubble insertion).
+    * **Stallable** (Write Enable): Triggered by **System Halt** (to lock the `ECALL` in EX).
 
 
-
-#### `id_ex_reg` (Decode  Execute)
-
-* **Control:** Flushable (Branch Taken OR Load-Use Bubble).
 * **Payload:**
-* **Control Bus:** `reg_write_en`, `mem_write_en`, `mem_read_en`, `alu_src_optn`, `alu_intent`, `rd_src_optn`, `is_branch`, `is_jal`, `is_jalr`.
-* **Data:** `pc_addr`, `rs1_data` (Read Port 1), `rs2_data` (Read Port 2), `extended_imm`.
-* **Metadata:** `rs1_addr`, `rs2_addr` (Forwarding), `rd_addr` (Destination), `funct3`, `funct7` (ALU Control).
+    * **Control Bus:** `reg_write_en`, `mem_write_en`, `mem_read_en`, `alu_src_optn`, `alu_intent`, `rd_src_optn`, `is_branch`, `is_jal`, `is_jalr`, `is_halt`.
+    * **Data:** `pc_addr`, `pc_plus_four`, `rs1_data` (Read Port 1), `rs2_data` (Read Port 2), `extended_imm`.
+    * **Metadata:** `rs1_addr`, `rs2_addr` (Forwarding), `rd_addr` (Destination), `funct3`, `funct7` (ALU Control).
 
-
-
-#### `ex_mem_reg` (Execute  Memory)
+* **Bit Size:**
+    * 12 control bits + 5 * 32 data bits +  25 metadata bits = 197 bits.
+#### `ex_mem_reg` (Execute → Memory)
 
 * **Control:** Always Enabled.
 * **Payload:**
-* **Control Bus:** `reg_write_en`, `mem_write_en`, `mem_read_en`, `rd_src_optn`.
-* **Data:** `alu_result` (Address/Result), `rs2_data` (Store Data), `pc_plus_4` (Link Address).
-* **Metadata:** `rd_addr` (Forwarding), `funct3` (Memory Alignment).
+    * **Control Bus:** `reg_write_en`, `mem_write_en`, `mem_read_en`, `rd_src_optn`, `is_halt`.
+    * **Data:** `alu_result` (Address/Result), `rs2_data` (Store Data), `pc_plus_4` (Link Address).
+    * **Metadata:** `rd_addr` (Forwarding), `funct3` (Memory Alignment).
+* **Bit Size:**
+    * 6 control bits + 48 data bits + 8 metadata bits = 110 bits.
 
-
-
-#### `mem_wb_reg` (Memory  Writeback)
+#### `mem_wb_reg` (Memory → Writeback)
 
 * **Control:** Always Enabled.
 * **Payload:**
-* **Control Bus:** `reg_write_en`, `rd_src_optn`.
-* **Data:** `alu_result` (Passthrough), `final_read_data` (Load Data), `pc_plus_4` (Link Address).
-* **Metadata:** `rd_addr` (Writeback Target).
+    * **Control Bus:** `reg_write_en`, `rd_src_optn`, `is_halt`.
+    * **Data:** `alu_result` (Passthrough), `final_read_data` (Load Data), `pc_plus_4` (Link Address).
+    * **Metadata:** `rd_addr` (Writeback Target).
+* **Bit Size:**
+    * 4 control bits + 48 data bits + 5 metadata bits = 105 bits.
+
 
 ---
 
@@ -363,50 +396,37 @@ This section details the logic required to maintain data integrity and instructi
 
 ---
 
-### 4.3. Hazard Detection Unit (Stall)
+#### `hazard_protection_unit`
 
-#### `hazard_detection_unit`
-
-* **Function:** Detects **Load-Use** situations where forwarding is insufficient. Since memory reads happen in the 4th stage, the data is not available for an instruction immediately following a Load. The pipeline must "stall" (pause) to allow the Load to complete.
-* **Location:** operates in the **ID** stage.
+* **Function:** The central nervous system for pipeline flow. It resolves **Load-Use Hazards**, **Control Hazards** (Branch/Jump), and **System Halts** by manipulating the stall (enable) and flush (reset) signals of the pipeline registers and PC.
+* **Location:** Operates in the **ID** stage, receiving signals from **ID** and **EX**.
 * **Inputs:**
 * `mem_read_id_ex`: Indicates if the instruction currently in **EX** is a Load.
-* `rd_id_ex`: The destination register of the instruction currently in **EX** (the Load).
+* `rd_id_ex`: The destination register of the instruction currently in **EX**.
 * `rs1_if_id`, `rs2_if_id`: The source registers of the instruction currently in **ID**.
+* `redirect_req_i`: From Flow Controller. Indicates a Branch/Jump is taken.
+* `halt_detected_i`: From Flow Controller. Indicates a valid HALT is processing.
 
 
 * **Outputs:**
-* `stall_req`: Master signal used to freeze state.
+* `pc_write_en`: 0 = Freeze PC.
+* `if_id_write_en`: 0 = Freeze IF/ID Register.
+* `if_id_flush`: 1 = Clear IF/ID Register (Insert NOP).
+* `id_ex_write_en`: 0 = Freeze ID/EX Register.
+* `id_ex_flush`: 1 = Clear ID/EX Register (Insert NOP).
 
 
-* **Logic:**
-* **Condition:** `if (mem_read_id_ex == 1) AND ((rd_id_ex == rs1_if_id) OR (rd_id_ex == rs2_if_id))`
-* **Action (When Condition met):**
-1. **Freeze PC:** Disable write enable on `program_counter_reg`.
-2. **Freeze IF/ID:** Disable write enable on the IF/ID pipeline register.
-3. **Bubble ID/EX:** Force control signals in the ID/EX register to 0 (insert a NOP) for the next cycle.
+* **Logic Table:**
+
+| State | Priority | PC Write | IF/ID Write | IF/ID Flush | ID/EX Write | ID/EX Flush | Reasoning |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **System Halt** | 1 (High) | **0** (Freeze) | **1** | **1** (Kill) | **0** (Freeze) | **0** | Lock `ECALL` in EX (to maintain Halt state). Kill instruction in ID. |
+| **Branch Redirect** | 2 | **1** | **1** | **1** (Kill) | **1** | **1** (Kill) | Kill both the instruction in Fetch (IF/ID) and Decode (ID/EX). |
+| **Load-Use Stall** | 3 | **0** (Freeze) | **0** (Freeze) | **0** | **1** | **1** (Bubble) | Pause Fetch/Decode. Insert NOP into EX to allow Memory stage to finish. |
+| **Normal Operation** | 4 (Low) | **1** | **1** | **0** | **1** | **0** | Standard execution flow. |
 
 ---
+### 5. Miscelaneous
+- **Notes:**
+    1. Because FPGA-based B-RAM IP modules tend to be Word-Addressable and RISC-V uses a strict Byte-Addressable system, at IF we simply ignore PC[0] and PC[1].
 
-### 4.4. Control Hazard Handling (Flush)
-
-*Note: While the detection logic resides in the `flow_controller` (See Section 3.3), the flushing mechanism is a distinct hazard operation.*
-
-#### `pipeline_flush_mechanism`
-
-* **Function:** Discards instructions that were fetched speculatively but are no longer valid due to a Control Transfer (Branch/Jump).
-* **Trigger:** `flush_req` (generated by **EX Stage** `flow_controller` when `do_redirect` is High).
-* **Logic:**
-* **Synchronous Reset:** When `flush_req` is High, the pipeline registers **IF/ID** and **ID/EX** are synchronously reset to zero/NOP.
-* **Penalty:** 2 Cycles (The instruction in Fetch and the instruction in Decode are both discarded).
-
-
-* **Visual Flow:**
-1. **Cycle N:** Branch is in EX. `flow_controller` determines "Taken". Assert `flush_req`.
-2. **Cycle N+1:**
-* PC is updated to `target_addr`.
-* IF/ID Register becomes NOP (Instruction fetched in Cycle N is killed).
-* ID/EX Register becomes NOP (Instruction decoded in Cycle N is killed).
-
-
-3. **Cycle N+2:** Correct instruction arrives at Fetch.

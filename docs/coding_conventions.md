@@ -1,4 +1,4 @@
-# Verification Standards: ANSI Color-Coded Testbenches
+# Coding Conventions
 
 Every testbench in the `riscv_core` project must adhere to the following structural and visual template to ensure consistent verification logs. For non-testbench directives, go to the end.
 

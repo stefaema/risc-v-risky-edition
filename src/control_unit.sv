@@ -9,6 +9,7 @@ module control_unit (
     input  logic [6:0] opcode_i,
 
     // Flow Control Flags
+    output logic       is_halt,      // 1 = Halt Execution (ecall)
     output logic       is_branch,    // 1 = Conditional Branch
     output logic       is_jal,       // 1 = Unconditional Jump (JAL)
     output logic       is_jalr,      // 1 = Jump Register (JALR)
@@ -35,6 +36,7 @@ module control_unit (
         OP_BRANCH   = 7'b1100011, // beq, bne
         OP_JAL      = 7'b1101111, // jal
         OP_JALR     = 7'b1100111, // jalr
+        OP_SYSTEM   = 7'b1110011, // ecall
         OP_LUI      = 7'b0110111; // lui
 
     // --- Control Constants (Dossier Sec 3.3 & 3.5) ---
@@ -53,6 +55,7 @@ module control_unit (
 
     always_comb begin
         // Default Safety State (NOP behavior)
+        is_halt      = 1'b0;
         is_branch    = 1'b0;
         is_jal       = 1'b0;
         is_jalr      = 1'b0;
@@ -119,6 +122,10 @@ module control_unit (
                 rd_src_optn  = WB_ALU;
                 alu_intent   = ALU_ADD; // Adds Imm to x0 (hardwired 0)
                 alu_src_optn = 1'b1;
+            end
+            
+            OP_SYSTEM: begin
+                is_halt = 1'b1;
             end
 
             default: begin

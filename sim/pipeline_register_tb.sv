@@ -20,7 +20,9 @@ module pipeline_register_tb;
     logic             clk;
     logic             rst_n;
     logic             flush_i;
-    logic             stall_i;
+    logic             write_en_i;
+    logic             global_stall_i;
+    logic             global_flush_i;
     logic [WIDTH-1:0] data_i;
     logic [WIDTH-1:0] data_o;
 
@@ -35,7 +37,9 @@ module pipeline_register_tb;
         .clk     (clk),
         .rst_n   (rst_n),
         .flush_i (flush_i),
-        .stall_i (stall_i),
+        .global_flush_i (global_flush_i),
+        .write_en_i (write_en_i),
+        .global_stall_i (global_stall_i),
         .data_i  (data_i),
         .data_o  (data_o)
     );
@@ -69,7 +73,9 @@ module pipeline_register_tb;
         // --- Test 1: Initialization & Asynchronous Reset ---
         rst_n   = 0;
         flush_i = 0;
-        stall_i = 0;
+        global_stall_i = 0;
+        global_flush_i = 0;
+        write_en_i = 1;
         data_i  = 32'hDEAD_BEEF;
         
         #1; // Wait for async reset
@@ -89,7 +95,7 @@ module pipeline_register_tb;
 
         // --- Test 3: Stall Behavior (Hold State) ---
         // Scenario: Stall is HIGH. Input changes, output should NOT change.
-        stall_i = 1;         // Freeze!
+        global_stall_i = 1;         // Freeze!
         data_i  = 32'h1234_5678; // New data trying to enter
         
         @(posedge clk);
@@ -98,7 +104,7 @@ module pipeline_register_tb;
 
         // --- Test 4: Stall Release ---
         // Scenario: Stall released. The pending data (0x12345678) should now load.
-        stall_i = 0;
+        global_stall_i = 0;
         
         @(posedge clk);
         #1;
@@ -116,7 +122,7 @@ module pipeline_register_tb;
         // --- Test 6: Priority Check (Flush vs Stall) ---
         // Scenario: BOTH Flush and Stall are active. Flush should win.
         flush_i = 1;
-        stall_i = 1;
+        global_stall_i = 1;
         data_i  = 32'hAAAA_BBBB;
         
         // First, ensure we have non-zero data to flush
@@ -132,7 +138,7 @@ module pipeline_register_tb;
 
         // --- Cleanup ---
         flush_i = 0;
-        stall_i = 0;
+        global_stall_i = 0;
         @(posedge clk);
 
         // C. Summary Footer
