@@ -59,7 +59,7 @@ module riscv_fpga_top (
     logic        loader_we;
     logic [31:0] loader_addr;
     logic [31:0] loader_wdata;
-    logic        loader_target; // 0=IMEM, 1=DMEM
+    logic        loader_target; 
     
     // C2 -> Core Control
     logic        c2_debug_active;
@@ -70,14 +70,14 @@ module riscv_fpga_top (
     logic [31:0] c2_dmem_snoop_data;
     logic        core_halted;
 
-    // Debug Taps
-    logic [4:0]  rf_dbg_addr;
-    logic [31:0] rf_dbg_data;
-    logic [95:0] if_id_flat;
-    logic [196:0] id_ex_flat;
-    logic [109:0] ex_mem_flat;
-    logic [104:0] mem_wb_flat;
-    logic [15:0] hazard_status;
+    // Debug Taps (Updated Widths)
+    logic [4:0]   rf_dbg_addr;
+    logic [31:0]  rf_dbg_data;
+    logic [95:0]  if_id_flat;
+    logic [163:0] id_ex_flat;  // 164 bits
+    logic [108:0] ex_mem_flat; // 109 bits
+    logic [103:0] mem_wb_flat; // 104 bits
+    logic [15:0]  hazard_status;
 
     // -------------------------------------------------------------------------
     // 3. Command & Control (C2) Interface Wrapper
@@ -128,33 +128,33 @@ module riscv_fpga_top (
     assign core_safe_stall = (c2_debug_active) ? c2_debug_stall : 1'b1;
 
     riscv_core core_inst (
-        .clk_i                (main_clk),
-        .rst_ni               (sys_rst_n),
-        .global_stall_i       (core_safe_stall),
-        .global_flush_i       (c2_soft_reset),
+        .clk_i                 (main_clk),
+        .rst_ni                (sys_rst_n),
+        .global_freeze_i       (core_safe_stall),
+        .soft_reset_i          (c2_soft_reset),
 
-        .instr_mem_addr_o     (core_imem_addr),
-        .instr_mem_data_i     (core_imem_data),
+        .imem_addr_o           (core_imem_addr),
+        .imem_inst_i           (core_imem_data),
 
-        .data_mem_addr_o      (core_dmem_addr),
-        .data_mem_write_data_o(core_dmem_wdata),
-        .data_mem_read_data_i (core_dmem_rdata),
-        .data_mem_write_en_o  (core_dmem_we),
-        .data_mem_byte_mask_o (core_dmem_byte_mask),
-        .data_mem_min_addr_o  (core_tracker_min),
-        .data_mem_max_addr_o  (core_tracker_max),
+        .dmem_addr_o           (core_dmem_addr),
+        .dmem_wdata_o          (core_dmem_wdata),
+        .dmem_rdata_i          (core_dmem_rdata),
+        .dmem_write_en_o       (core_dmem_we),
+        .dmem_byte_mask_o      (core_dmem_byte_mask),
+        .dmem_min_addr_o       (core_tracker_min),
+        .dmem_max_addr_o       (core_tracker_max),
 
-        .core_pc_o            (), 
-        .core_halted_o        (core_halted),
-        .rs_dbg_addr_i        (rf_dbg_addr),
-        .rs_dbg_data_o        (rf_dbg_data),
+        .core_halted_o         (core_halted),
+        .dbg_rf_addr_i         (rf_dbg_addr),
+        .dbg_rf_data_o         (rf_dbg_data),
         
-        .if_id_flat_o         (if_id_flat),
-        .id_ex_flat_o         (id_ex_flat),
-        .ex_mem_flat_o        (ex_mem_flat),
-        .mem_wb_flat_o        (mem_wb_flat),
-        .hazard_status_o      (hazard_status)
+        .tap_if_id_o           (if_id_flat),
+        .tap_id_ex_o           (id_ex_flat),
+        .tap_ex_mem_o          (ex_mem_flat),
+        .tap_mem_wb_o          (mem_wb_flat),
+        .tap_hazard_o          (hazard_status)
     );
+
 
     // -------------------------------------------------------------------------
     // 5. MEMORY GLUE LOGIC (Traffic Cop)
@@ -200,15 +200,15 @@ module riscv_fpga_top (
     // -------------------------------------------------------------------------
     // 6. Xilinx BRAM IP Instantiation
     // -------------------------------------------------------------------------
-    // Your IP: risky_access_memory
+    // IP: risky_access_memory
     // Config: True Dual Port, 32-bit width, Byte Write Enable, 1024 depth
     
     // INSTANCE 1: Instruction Memory (Port A used, Port B unused)
     risky_access_memory imem_inst (
         // PORT A
         .clka  (main_clk),
-        .rsta  (sys_rst_sys), // Active High Reset
-        .ena   (1'b1),        // Always Enable
+        .rsta  (sys_rst_sys),   // Active High Reset
+        .ena   (1'b1),          // Always Enable
         .wea   (imem_we_mux),
         .addra (imem_addr_mux), // IP takes 32-bit; Logic handles value
         .dina  (imem_wdata_mux),

@@ -28,9 +28,9 @@
      inkscape:pagecheckerboard="1"
      inkscape:deskcolor="#505050"
      inkscape:document-units="mm"
-     inkscape:zoom="0.70710678"
-     inkscape:cx="1540.0786"
-     inkscape:cy="468.8118"
+     inkscape:zoom="2"
+     inkscape:cx="1349"
+     inkscape:cy="728.75"
      inkscape:window-width="1620"
      inkscape:window-height="2846"
      inkscape:window-x="5749"
@@ -173,12 +173,28 @@
      inkscape:groupmode="layer"
      id="layer1">
     <rect
-       style="fill:#000000;fill-opacity:0.933333;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+       style="fill:#000000;fill-opacity:0.82520324;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="rect1034"
        width="841"
        height="594"
        x="0"
        y="0" />
+    <path
+       id="path700"
+       style="fill:none;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none"
+       d="m 624.96369,124.94001 v 9.99991 9.99989 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 9.9999 10.00042 9.99991 9.99991 h 9.99991 9.9999 v -9.99991 -9.99991 -10.00042 -9.9999 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.99989 -9.99991 h -9.9999 z" />
+    <path
+       id="path774"
+       style="fill:none;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none"
+       d="m 764.96359,124.94001 v 9.99991 9.99989 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 9.9999 10.00042 9.99991 9.99991 h 9.99991 9.9999 v -9.99991 -9.99991 -10.00042 -9.9999 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.99989 -9.99991 h -9.9999 z" />
+    <path
+       style="fill:none;fill-opacity:1;stroke:#30b030;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#Triangle);marker-start:url(#marker132)"
+       d="m 644.99997,154.99999 h 69.99999 v 15 h 50.00001"
+       id="path1039" />
+    <path
+       style="fill:none;fill-opacity:1;stroke:#30b030;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#Triangle);marker-start:url(#marker132)"
+       d="m 419.99997,244.99999 h 10.00001 v -100 h 170 15 v 10 h 9.99998"
+       id="path1038" />
     <path
        style="fill:none;fill-opacity:1;stroke:#ff9856;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#Triangle)"
        d="m 784.99995,294.99999 9.80001,0.0393 0.20001,34.9607 H 484.99998 v 5"
@@ -1729,11 +1745,6 @@
        d="m 349.9636,144.93987 40.00001,10e-6 0.0364,85.06011 h 10"
        id="path611"
        sodipodi:nodetypes="cccc" />
-    <path
-       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#marker132);marker-end:url(#Triangle)"
-       d="m 384.9636,172.43988 h 3.25717 c 1.23806,-1.32292 2.32378,-1.32291 3.25717,0 h 8.48566"
-       id="path612"
-       sodipodi:nodetypes="cccc" />
     <g
        id="g620"
        transform="translate(-30.036365,-0.06010713)">
@@ -2120,10 +2131,6 @@
          x="608.35364"
          y="285.48773"
          id="tspan699">FUNCT3@EX</tspan></text>
-    <path
-       id="path700"
-       style="fill:none;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none"
-       d="m 624.96369,124.94001 v 9.99991 9.99989 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 9.9999 10.00042 9.99991 9.99991 h 9.99991 9.9999 v -9.99991 -9.99991 -10.00042 -9.9999 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.99989 -9.99991 h -9.9999 z" />
     <rect
        style="fill:none;fill-opacity:1;stroke:#5555ff;stroke-width:0.4;stroke-dasharray:none;stroke-opacity:1"
        id="rect700"
@@ -2381,7 +2388,7 @@
          id="tspan753"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Consolas;-inkscape-font-specification:Consolas;fill:#ffffff;stroke:none;stroke-width:0.4;stroke-dasharray:none"
          x="695.67218"
-         y="243.55324">WRITE</tspan><tspan
+         y="243.55324">STORE</tspan><tspan
          sodipodi:role="line"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Consolas;-inkscape-font-specification:Consolas;fill:#ffffff;stroke:none;stroke-width:0.4;stroke-dasharray:none"
          x="695.67218"
@@ -2473,10 +2480,6 @@
        style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#Triangle)"
        d="m 644.96358,244.93987 h 35.00001 v -15 h 10.00001"
        id="path773" />
-    <path
-       id="path774"
-       style="fill:none;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none"
-       d="m 764.96359,124.94001 v 9.99991 9.99989 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 10.00042 9.99991 9.9999 9.99991 9.99991 9.9999 10.00042 9.99991 9.99991 h 9.99991 9.9999 v -9.99991 -9.99991 -10.00042 -9.9999 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.9999 -9.99991 -10.00042 -9.99991 -9.99991 -9.99989 -9.99991 h -9.9999 z" />
     <rect
        style="fill:none;fill-opacity:1;stroke:#5555ff;stroke-width:0.4;stroke-dasharray:none;stroke-opacity:1"
        id="rect774"
@@ -2673,6 +2676,17 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Consolas;-inkscape-font-specification:Consolas;fill:#ffffff;stroke:none;stroke-width:0.4;stroke-dasharray:none"
          x="408.22006"
          y="246.34042">PC</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:2.82222px;font-family:Bahnschrift;-inkscape-font-specification:Bahnschrift;text-align:start;letter-spacing:0.447146px;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#30b030;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none;fill-opacity:1"
+       x="633.71344"
+       y="155.8279"
+       id="text791-9"><tspan
+         sodipodi:role="line"
+         id="tspan791-8"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Consolas;-inkscape-font-specification:Consolas;fill:#30b030;stroke:none;stroke-width:0.4;stroke-dasharray:none;fill-opacity:1"
+         x="633.71344"
+         y="155.8279">PC</tspan></text>
     <g
        id="g794"
        transform="translate(339.49997,59.999953)">
@@ -3044,20 +3058,9 @@
          y="170.74005">FORCE_NOP</tspan></text>
     <path
        style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-start:url(#marker132);marker-end:url(#Triangle)"
-       d="m 419.99997,172.43988 h 10.00001 L 429.99999,116 H 125 l -1e-5,14 H 84.963335"
+       d="m 384.96362,172.4399 h 3.24627 c 0.47804,-1.91987 2.06953,-1.91987 3.25312,0 h 3.50062 l 10e-6,-56.43988 L 291.99999,116 c -0.96996,-1.33336 -2.89739,-1.33336 -4,0 L 125,116 l -1e-5,14 H 84.963335"
        id="path839"
-       sodipodi:nodetypes="cccccc" />
-    <text
-       xml:space="preserve"
-       style="font-size:2.82222px;font-family:Bahnschrift;-inkscape-font-specification:Bahnschrift;text-align:start;letter-spacing:0.447146px;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none"
-       x="406.72888"
-       y="173.34042"
-       id="text839"><tspan
-         sodipodi:role="line"
-         id="tspan839"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Consolas;-inkscape-font-specification:Consolas;fill:#ffffff;stroke:none;stroke-width:0.4;stroke-dasharray:none"
-         x="406.72888"
-         y="173.34042">TRGT</tspan></text>
+       sodipodi:nodetypes="cccccccccc" />
     <path
        style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#Triangle);marker-start:url(#marker132)"
        d="m 54.963607,139.93978 -24.963609,0.0602 -0.02723,29.93987"
@@ -4442,6 +4445,39 @@
          x="150.28069"
          y="304.58755"
          id="tspan1036">RESET</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:2.82223px;line-height:0.8;font-family:Consolas;-inkscape-font-specification:Consolas;text-align:start;letter-spacing:0.447146px;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:0.933333;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+       x="124.99999"
+       y="107.01472"
+       id="text1037"><tspan
+         sodipodi:role="line"
+         id="tspan1037"
+         style="stroke-width:1"
+         x="124.99999"
+         y="107.01472" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:2.82222px;font-family:Bahnschrift;-inkscape-font-specification:Bahnschrift;text-align:start;letter-spacing:0.447146px;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none"
+       x="146.13014"
+       y="255.84042"
+       id="text1038"><tspan
+         sodipodi:role="line"
+         id="tspan1038"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Consolas;-inkscape-font-specification:Consolas;fill:#ffffff;stroke:none;stroke-width:0.4;stroke-dasharray:none"
+         x="146.13014"
+         y="255.84042">INST</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:2.82222px;font-family:Bahnschrift;-inkscape-font-specification:Bahnschrift;text-align:start;letter-spacing:0.447146px;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#30b030;fill-opacity:1;stroke:#ffffff;stroke-width:0.4;stroke-dasharray:none"
+       x="773.16962"
+       y="170.76826"
+       id="text1039"><tspan
+         sodipodi:role="line"
+         id="tspan1039"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:2.82222px;font-family:Consolas;-inkscape-font-specification:Consolas;fill:#30b030;fill-opacity:1;stroke:none;stroke-width:0.4;stroke-dasharray:none"
+         x="773.16962"
+         y="170.76826">PC</tspan></text>
   </g>
   <metadata
      id="metadata161">

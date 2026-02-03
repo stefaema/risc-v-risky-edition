@@ -13,7 +13,7 @@ module flow_controller (
     input  logic [2:0]  funct3_i,       // Branch condition type
 
     // Outputs
-    output logic        flow_change_o,    // Indicates a change in control flow (branch/jump taken)
+    output logic        flow_change_o    // Indicates a change in control flow (branch/jump taken)
 );
 
     // FLUSH = ((IS_BRANCH) & (ZERO xor FUNCT3)) | IS_JAL | IS_JALR
@@ -23,7 +23,7 @@ module flow_controller (
         // ZERO xor FUNCT3[0] determines branch taken condition. (Zero flag and branch type need to differ for taken)
         branch_taken = zero_i ^ funct3_i[0];
         
-        flush_o = (is_branch_i && branch_taken) || is_jal_i || is_jalr_i;
+        flow_change_o = (is_branch_i && branch_taken) || is_jal_i || is_jalr_i;
     end
 
 endmodule

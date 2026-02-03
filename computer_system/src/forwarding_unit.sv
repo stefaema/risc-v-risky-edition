@@ -34,11 +34,11 @@ module forwarding_unit (
 
         // RS1 forwarding
         if (reg_write_ex_i && (rd_ex_i != 5'b0) && (rd_ex_i == rs1_id_i)) begin
-            forward_rs1_o = 2'b11; // Forward from EX
+            forward_rs1_o = 2'b01; // Forward from EX
         end else if (reg_write_mem_i && (rd_mem_i != 5'b0) && (rd_mem_i == rs1_id_i)) begin
-            forward_rs1_o = 2'b01; // Forward from MEM
+            forward_rs1_o = 2'b10; // Forward from MEM
         end else if (reg_write_wb_i && (rd_wb_i != 5'b0) && (rd_wb_i == rs1_id_i)) begin
-            forward_rs1_o = 2'b10; // Forward from WB
+            forward_rs1_o = 2'b11; // Forward from WB
         end
 
         // RS2 forwarding

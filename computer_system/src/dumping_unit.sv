@@ -25,10 +25,11 @@ module dumping_unit (
     input  logic [31:0] rf_dbg_data_i,
 
     // Flattened Pipeline Taps
+    // Updated widths based on riscv_core.sv definitions
     input  logic [95:0]  if_id_flat_i,
-    input  logic [196:0] id_ex_flat_i,
-    input  logic [109:0] ex_mem_flat_i,
-    input  logic [104:0] mem_wb_flat_i,
+    input  logic [163:0] id_ex_flat_i,  // Changed from 197 to 164
+    input  logic [108:0] ex_mem_flat_i, // Changed from 110 to 109
+    input  logic [103:0] mem_wb_flat_i, // Changed from 105 to 104
     input  logic [15:0]  hazard_status_i,
 
     // Memory Interface
@@ -38,7 +39,7 @@ module dumping_unit (
     // Snooping Signals (from MEM stage/Tracker)
     input  logic        dmem_write_en_snoop_i,
     input  logic [31:0] dmem_addr_snoop_i,
-    input  logic [31:0] dmem_write_data_snoop_i, // Inferred requirement from Spec 10.5.4
+    input  logic [31:0] dmem_write_data_snoop_i, 
     input  logic [31:0] min_addr_i,
     input  logic [31:0] max_addr_i
 );
@@ -53,30 +54,39 @@ module dumping_unit (
     // -------------------------------------------------------------------------
 
     // --- 1. Pipeline Unpacking ---
-    // Extract fields.
 
     // IF/ID (96 bits): {pc_f, instr_f, pc_plus_4_f}
     logic [31:0] if_id_pc, if_id_instr, if_id_pc4;
     assign {if_id_pc, if_id_instr, if_id_pc4} = if_id_flat_i;
 
-    // ID/EX (197 bits): {Controls(12), PC(32), PC4(32), RS1(32), RS2(32), Imm(32), Meta(25)}
-    logic [11:0] id_ex_ctrl;
-    logic [31:0] id_ex_pc, id_ex_pc4, id_ex_rs1, id_ex_rs2, id_ex_imm;
+    // ID/EX (164 bits): {Controls(11), PC(32), RS1(32), RS2(32), Imm(32), Meta(25)}
+    // Note: Core no longer passes PC+4. We reconstruct it here for the dump protocol.
+    logic [10:0] id_ex_ctrl;
+    logic [31:0] id_ex_pc, id_ex_rs1, id_ex_rs2, id_ex_imm;
     logic [24:0] id_ex_meta;
-    assign {id_ex_ctrl, id_ex_pc, id_ex_pc4, id_ex_rs1, id_ex_rs2, id_ex_imm, id_ex_meta} = id_ex_flat_i;
+    logic [31:0] id_ex_pc4; // Reconstruction
+    
+    assign {id_ex_ctrl, id_ex_pc, id_ex_rs1, id_ex_rs2, id_ex_imm, id_ex_meta} = id_ex_flat_i;
+    assign id_ex_pc4 = id_ex_pc + 32'd4; 
 
-    // EX/MEM (110 bits): {Ctrl(6), Data(96), Meta(8)} -> {Ctrl, ALU, StoreData, PC4, Meta}
-    // Packing in core: {ctrl, alu, store_data, pc_plus_4, meta}
-    logic [5:0]  ex_mem_ctrl;
-    logic [31:0] ex_mem_alu, ex_mem_store_data, ex_mem_pc4;
+    // EX/MEM (109 bits): {Ctrl(5), ExecData(32), StoreData(32), PC(32), Meta(8)}
+    // Note: Core passes PC, not PC+4.
+    logic [4:0]  ex_mem_ctrl;
+    logic [31:0] ex_mem_alu, ex_mem_store_data, ex_mem_pc;
     logic [7:0]  ex_mem_meta;
-    assign {ex_mem_ctrl, ex_mem_alu, ex_mem_store_data, ex_mem_pc4, ex_mem_meta} = ex_mem_flat_i;
+    logic [31:0] ex_mem_pc4; // Reconstruction
 
-    // MEM/WB (105 bits): {Ctrl(4), Data(96), Meta(5)} -> {Ctrl, ALU, ReadData, PC4, Meta}
-    logic [3:0]  mem_wb_ctrl;
-    logic [31:0] mem_wb_alu, mem_wb_read_data, mem_wb_pc4;
+    assign {ex_mem_ctrl, ex_mem_alu, ex_mem_store_data, ex_mem_pc, ex_mem_meta} = ex_mem_flat_i;
+    assign ex_mem_pc4 = ex_mem_pc + 32'd4;
+
+    // MEM/WB (104 bits): {Ctrl(3), ExecData(32), ReadData(32), PC(32), Meta(5)}
+    logic [2:0]  mem_wb_ctrl;
+    logic [31:0] mem_wb_alu, mem_wb_read_data, mem_wb_pc;
     logic [4:0]  mem_wb_meta;
-    assign {mem_wb_ctrl, mem_wb_alu, mem_wb_read_data, mem_wb_pc4, mem_wb_meta} = mem_wb_flat_i;
+    logic [31:0] mem_wb_pc4; // Reconstruction
+
+    assign {mem_wb_ctrl, mem_wb_alu, mem_wb_read_data, mem_wb_pc, mem_wb_meta} = mem_wb_flat_i;
+    assign mem_wb_pc4 = mem_wb_pc + 32'd4;
 
     // --- 2. Serialization Array Construction (Spec 10.5.3) ---
     // We map all pipeline data into a uniform 32-bit word array for easier iteration.
@@ -94,28 +104,31 @@ module dumping_unit (
         pipe_dump_words[3]  = if_id_pc4;
 
         // ID/EX (28 Bytes)
-        // Spec: Ctrl (2B + Pad)
-        pipe_dump_words[4]  = {16'h0000, 4'b0, id_ex_ctrl}; 
+        // Spec: Ctrl (2B + Pad). Ctrl is now 11 bits.
+        // Pad = 16 (High) + 5 (Low) = 21 bits zero.
+        pipe_dump_words[4]  = {16'h0000, 5'b0, id_ex_ctrl}; 
         pipe_dump_words[5]  = id_ex_pc;
-        pipe_dump_words[6]  = id_ex_pc4;
+        pipe_dump_words[6]  = id_ex_pc4; // Uses local reconstruction
         pipe_dump_words[7]  = id_ex_rs1;
         pipe_dump_words[8]  = id_ex_rs2;
         pipe_dump_words[9]  = id_ex_imm;
         pipe_dump_words[10] = {7'b0, id_ex_meta}; // Meta is 25 bits
 
         // EX/MEM (16 Bytes)
-        // Spec: Ctrl_Meta (2B + Pad) -> Ctrl(6) + Meta(8) = 14 bits
-        pipe_dump_words[11] = {16'h0000, 2'b0, ex_mem_ctrl, ex_mem_meta};
+        // Spec: Ctrl_Meta (2B + Pad). 
+        // Ctrl(5) + Meta(8) = 13 bits. Pad 3 bits.
+        pipe_dump_words[11] = {16'h0000, 3'b0, ex_mem_ctrl, ex_mem_meta};
         pipe_dump_words[12] = ex_mem_alu;
-        pipe_dump_words[13] = ex_mem_store_data; // RS2 Data
-        pipe_dump_words[14] = ex_mem_pc4;
+        pipe_dump_words[13] = ex_mem_store_data; 
+        pipe_dump_words[14] = ex_mem_pc4; // Uses local reconstruction
 
         // MEM/WB (16 Bytes)
-        // Spec: Ctrl_Meta (2B + Pad) -> Ctrl(4) + Meta(5) = 9 bits
-        pipe_dump_words[15] = {16'h0000, 7'b0, mem_wb_ctrl, mem_wb_meta};
+        // Spec: Ctrl_Meta (2B + Pad).
+        // Ctrl(3) + Meta(5) = 8 bits. Pad 8 bits.
+        pipe_dump_words[15] = {16'h0000, 8'b0, mem_wb_ctrl, mem_wb_meta};
         pipe_dump_words[16] = mem_wb_alu;
         pipe_dump_words[17] = mem_wb_read_data;
-        pipe_dump_words[18] = mem_wb_pc4;
+        pipe_dump_words[18] = mem_wb_pc4; // Uses local reconstruction
     end
 
     // -------------------------------------------------------------------------
@@ -136,7 +149,7 @@ module dumping_unit (
     } state_t;
 
     state_t state, next_state;
-    state_t return_state, next_return_state; // For sub-routine returns
+    state_t return_state, next_return_state; 
 
     // -------------------------------------------------------------------------
     // Internal Registers
@@ -157,11 +170,9 @@ module dumping_unit (
 
     always_comb begin
         current_word_to_send = 32'h0;
-        dump_needs_mem_o           = 1'b0; // Default: Release bus
+        dump_needs_mem_o     = 1'b0; // Default: Release bus
 
         // 1. Bus Request Logic
-        // We request the Data Memory Bus ONLY in Continuous Mode.
-
         if (latched_mode == 1'b1) begin
             case (state)
                 S_DUMP_MEM_CONFIG_1, // Sending Min Addr
@@ -290,7 +301,6 @@ module dumping_unit (
                 tx_start_o = 1'b1;
                 next_state = S_WAIT_TX;
                 
-                // Logic to advance bytes and registers
                 if (byte_idx == 3) begin
                     next_byte_idx = 0;
                     if (rf_idx == 31) begin

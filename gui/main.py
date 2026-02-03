@@ -14,10 +14,17 @@ BAUD = 115200
 CMD_DUMP_ALERT = 0xDA
 SIZE_REG_FILE  = 128
 SIZE_HAZARD    = 4
-SIZE_IF_ID     = 12
-SIZE_ID_EX     = 28
-SIZE_EX_MEM    = 16
-SIZE_MEM_WB    = 16
+
+# Pipeline Sizes (Based on User "Real Content" Packing)
+# IF/ID:  PC(4) + Instr(4) + PC4(4) = 12
+SIZE_IF_ID     = 12 
+# ID/EX:  Ctrl(4) + PC(4) + RS1(4) + RS2(4) + Imm(4) + Meta(4) = 24
+SIZE_ID_EX     = 24 
+# EX/MEM: CtrlMeta(4) + ALU(4) + Store(4) + PC(4) = 16
+SIZE_EX_MEM    = 16 
+# MEM/WB: CtrlMeta(4) + Exec(4) + Read(4) + PC(4) = 16
+SIZE_MEM_WB    = 16 
+
 SIZE_PIPELINE  = SIZE_HAZARD + SIZE_IF_ID + SIZE_ID_EX + SIZE_EX_MEM + SIZE_MEM_WB
 
 # --- STYLING ---
@@ -28,8 +35,8 @@ C_YELLOW = "\033[93m"
 C_RESET  = "\033[0m"
 C_BOLD   = "\033[1m"
 
-def fmt_bool(val):
-    return f"{C_GREEN}1{C_RESET}" if val else f"{C_RED}0{C_RESET}"
+def fmt_bool(val, true_txt="1", false_txt="0"):
+    return f"{C_GREEN}{true_txt}{C_RESET}" if val else f"{C_RED}{false_txt}{C_RESET}"
 
 # ==============================================================================
 # 1. DATA STRUCTURES (The Model)
@@ -37,15 +44,32 @@ def fmt_bool(val):
 
 @dataclass
 class HazardState:
-    pc_stall: bool; id_stall: bool; ex_stall: bool
-    if_flush: bool; id_flush: bool
-    fwd_a: int; fwd_b: int
+    # Based on tap_hazard_o = {6'b0, pc_wen, if_wen, ctrl_haz, load_haz, rs2_fwd, rs1_fwd, 3'b0, end}
+    pc_write_en: bool
+    if_id_write_en: bool
+    control_hazard: bool
+    load_use_hazard: bool
+    enc_rs2_fwd: bool
+    enc_rs1_fwd: bool
+    program_ended: bool
 
     def table_row(self):
-        # Explicitly lists all flags even when 0
-        return (f"| PC_S:{fmt_bool(self.pc_stall)} | ID_S:{fmt_bool(self.id_stall)} | "
-                f"EX_S:{fmt_bool(self.ex_stall)} | IF_F:{fmt_bool(self.if_flush)} | "
-                f"ID_F:{fmt_bool(self.id_flush)} | FwdA:{self.fwd_a:02b} | FwdB:{self.fwd_b:02b} |")
+        # Interpret Write Enables as Stalls for display clarity
+        pc_state = f"{C_GREEN}RUN{C_RESET}" if self.pc_write_en else f"{C_RED}STALL{C_RESET}"
+        if_state = f"{C_GREEN}RUN{C_RESET}" if self.if_id_write_en else f"{C_RED}STALL{C_RESET}"
+        
+        flags = []
+        if self.control_hazard: flags.append("CTRL_FLUSH")
+        if self.load_use_hazard: flags.append("LOAD_STALL")
+        if self.program_ended: flags.append(f"{C_RED}HALTED{C_RESET}")
+        flag_str = " ".join(flags) if flags else "-"
+
+        fwd_str = ""
+        if self.enc_rs1_fwd: fwd_str += "FwdA "
+        if self.enc_rs2_fwd: fwd_str += "FwdB"
+        if not fwd_str: fwd_str = "-"
+
+        return (f"| PC: {pc_state} | IF/ID: {if_state} | Hazards: {flag_str:12} | Forward: {fwd_str:8} |")
 
 @dataclass
 class StageIFID:
@@ -56,6 +80,7 @@ class StageIFID:
 
 @dataclass
 class StageIDEX:
+    # Control (12 bits)
     reg_write: bool
     mem_write: bool
     mem_read: bool
@@ -67,12 +92,13 @@ class StageIDEX:
     is_jalr: bool
     is_halt: bool
     
+    # Data
     pc: int
-    pc4: int
     rs1_data: int
     rs2_data: int
     imm: int
     
+    # Metadata
     rs1_addr: int
     rs2_addr: int
     rd_addr: int
@@ -80,66 +106,75 @@ class StageIDEX:
     funct7: int
 
     def table_header(self):
-        return "| RegW | MemW | MemR | SrcImm | Br | Jal | Jalr | HALT |"
+        return "| RegW | MemW | MemR | AluSrc | Intent | RdSrc | Br | Jal | Jalr | HALT |"
 
     def table_row(self):
-        vals = [self.reg_write, self.mem_write, self.mem_read, self.alu_src_imm, 
-                self.is_branch, self.is_jal, self.is_jalr, self.is_halt]
-        row = " | ".join([f"  {fmt_bool(v)} " for v in vals])
+        intent_map = {0:"ADD", 1:"SUB", 2:"SLT", 3:"?"} # Example mapping
+        vals = [
+            fmt_bool(self.reg_write), fmt_bool(self.mem_write), fmt_bool(self.mem_read),
+            fmt_bool(self.alu_src_imm, "IMM", "REG"), 
+            f"{self.alu_intent:1d}", f"{self.rd_src:1d}",
+            fmt_bool(self.is_branch), fmt_bool(self.is_jal), fmt_bool(self.is_jalr), fmt_bool(self.is_halt)
+        ]
+        row = " | ".join([f"  {v} " for v in vals])
         return f"|{row}|"
     
     def __str__(self):
-        ctrls = []
-        if self.reg_write: ctrls.append("RegW")
-        if self.mem_write: ctrls.append("MemW")
-        if self.mem_read: ctrls.append("MemR")
-        if self.is_branch: ctrls.append("Br")
-        if self.is_jal: ctrls.append("Jal")
-        if self.is_halt: ctrls.append("HALT")
-        ctrl_str = " ".join(ctrls)
-        
-        meta = f"rs1:x{self.rs1_addr} rs2:x{self.rs2_addr} rd:x{self.rd_addr}"
-        return f"{C_GREEN}[ID/EX]{C_RESET}  PC: 0x{self.pc:08X} | Imm: 0x{self.imm:08X} | {ctrl_str} | {meta}"
+        return (f"{C_GREEN}[ID/EX]{C_RESET}  PC: 0x{self.pc:08X} | Imm: 0x{self.imm:08X} | "
+                f"rs1:x{self.rs1_addr} rs2:x{self.rs2_addr} rd:x{self.rd_addr}")
 
 @dataclass
 class StageEXMEM:
+    # Control
     reg_write: bool
     mem_write: bool
     mem_read: bool
     rd_src: int
     is_halt: bool
     
+    # Data
     alu_res: int
-    store_val: int
-    pc4: int
+    store_data: int
+    pc: int
     
+    # Meta
     rd_addr: int
     funct3: int
 
     def __str__(self):
         ctrls = []
-        if self.mem_write: ctrls.append("MemW")
-        if self.mem_read: ctrls.append("MemR")
+        if self.mem_write: ctrls.append(f"{C_RED}MemW{C_RESET}")
+        if self.mem_read: ctrls.append(f"{C_CYAN}MemR{C_RESET}")
         ctrl_str = " ".join(ctrls)
-        return f"{C_GREEN}[EX/MEM]{C_RESET} ALU: 0x{self.alu_res:08X} | Store: 0x{self.store_val:08X} | Rd: x{self.rd_addr} | {ctrl_str}"
+        return (f"{C_GREEN}[EX/MEM]{C_RESET} ALU: 0x{self.alu_res:08X} | Store: 0x{self.store_data:08X} | "
+                f"Rd: x{self.rd_addr} | {ctrl_str}")
 
 @dataclass
 class StageMEMWB:
+    # Control
     reg_write: bool
     rd_src: int
     is_halt: bool
     
-    alu_res: int
-    mem_data: int
-    pc4: int
+    # Data
+    exec_data: int # ALU result
+    read_data: int # Memory read result
+    pc: int
     
+    # Meta
     rd_addr: int
 
     def __str__(self):
-        src_str = ["ALU", "PC+4", "MEM", "?"][self.rd_src & 3]
-        wb_str = f"RegW(x{self.rd_addr})={src_str}" if self.reg_write else "NoWrite"
-        if self.is_halt: wb_str += " HALTED"
-        return f"{C_GREEN}[MEM/WB]{C_RESET} ALU: 0x{self.alu_res:08X} | Mem: 0x{self.mem_data:08X} | {wb_str}"
+        # RdSrc mapping: 0=ALU, 1=Mem, 2=PC+4
+        src_map = ["ALU", "MEM", "PC+4", "?"]
+        src_str = src_map[self.rd_src & 3]
+        
+        wb_str = f"Write(x{self.rd_addr})={src_str}" if self.reg_write else "NoWrite"
+        if self.is_halt: wb_str += f" {C_RED}HALTED{C_RESET}"
+        
+        val_show = self.read_data if (self.rd_src == 1) else self.exec_data
+        
+        return f"{C_GREEN}[MEM/WB]{C_RESET} Val: 0x{val_show:08X} | {wb_str}"
 
 @dataclass
 class MemoryState:
@@ -171,7 +206,7 @@ class MemoryState:
 
 @dataclass
 class RISCVState:
-    source_mode: str  # "STEP" or "CONTINUOUS"
+    source_mode: str
     registers: List[int]
     hazard: HazardState
     if_id: StageIFID
@@ -181,7 +216,6 @@ class RISCVState:
     memory: MemoryState
 
     def pretty_print(self):
-        # Header now includes the SOURCE MODE
         title = f" FPGA STATE DUMP ({self.source_mode}) "
         print(f"\n{C_BOLD}╔{title:═^60}╗{C_RESET}")
         
@@ -201,11 +235,12 @@ class RISCVState:
         print(f"  {self.hazard.table_row()}")
         print(f"  {self.if_id}")
         print(f"  {self.id_ex}")
+        print(f"  {self.ex_mem}")
+        print(f"  {self.mem_wb}")
+        
         print(f"\n{C_YELLOW}► ID/EX Control Signals{C_RESET}")
         print(f"  {self.id_ex.table_header()}")
         print(f"  {self.id_ex.table_row()}")
-        print(f"  {self.ex_mem}")
-        print(f"  {self.mem_wb}")
 
         # Memory
         print(self.memory)
@@ -232,10 +267,13 @@ class RISCVDumpParser:
                 sys.stdout.flush()
                 continue
             
-            if len(self.buffer) < (2 + SIZE_REG_FILE + SIZE_PIPELINE): return 
+            # Check for Header + Regs + Pipeline
+            # 2 (Alert+Mode) + 128 (Regs) + SIZE_PIPELINE
+            header_size = 2 + SIZE_REG_FILE + SIZE_PIPELINE
+            if len(self.buffer) < header_size: return 
 
             mode = self.buffer[1]
-            mem_offset = 2 + SIZE_REG_FILE + SIZE_PIPELINE
+            mem_offset = header_size
             
             if len(self.buffer) < mem_offset + 4: return 
 
@@ -252,7 +290,7 @@ class RISCVDumpParser:
                 else: word_count = ((max_a - min_a) // 4) + 1
                 mem_size = 8 + (word_count * 4)
 
-            total_size = 2 + SIZE_REG_FILE + SIZE_PIPELINE + mem_size
+            total_size = header_size + mem_size
 
             if len(self.buffer) >= total_size:
                 packet = self.buffer[:total_size]
@@ -268,77 +306,87 @@ class RISCVDumpParser:
 
     def decode_packet(self, data, mode, cont_word_count) -> RISCVState:
         ptr = 2
-        
-        # --- Source Mode Identification ---
         source_str = "STEP" if mode == 0x00 else "CONTINUOUS"
 
-        # --- Registers ---
+        # --- Registers (32 * 4B) ---
         regs = [struct.unpack('<I', data[ptr + i*4 : ptr + (i+1)*4])[0] for i in range(32)]
         ptr += SIZE_REG_FILE
         
         # --- Hazard (4B) ---
-        h_flags = data[ptr]; ptr += 1
-        h_fwd   = data[ptr]; ptr += 3
+        # User defined bits: [9]PC_WE [8]IF_WE [7]Ctrl [6]Load [5]Fwd2 [4]Fwd1 [0]ProgEnd
+        h_val = struct.unpack('<I', data[ptr:ptr+4])[0]; ptr += 4
         hazard = HazardState(
-            pc_stall = bool(h_flags & 0x01),
-            id_stall = bool(h_flags & 0x02),
-            ex_stall = bool(h_flags & 0x04),
-            if_flush = bool(h_flags & 0x08),
-            id_flush = bool(h_flags & 0x10),
-            fwd_a    = (h_fwd >> 2) & 0x03,
-            fwd_b    = h_fwd & 0x03
+            pc_write_en    = bool((h_val >> 9) & 1),
+            if_id_write_en = bool((h_val >> 8) & 1),
+            control_hazard = bool((h_val >> 7) & 1),
+            load_use_hazard= bool((h_val >> 6) & 1),
+            enc_rs2_fwd    = bool((h_val >> 5) & 1),
+            enc_rs1_fwd    = bool((h_val >> 4) & 1),
+            program_ended  = bool((h_val >> 0) & 1)
         )
 
         # --- IF/ID (12B) ---
+        # {pc_id, instr_id, pc_plus_4_id}
         if_pc, if_instr, if_pc4 = struct.unpack('<III', data[ptr:ptr+12]); ptr += 12
         stage_if = StageIFID(if_pc, if_instr, if_pc4)
 
-        # --- ID/EX (28B) ---
-        id_ctrl, id_pc, id_pc4, id_rs1, id_rs2, id_imm, id_meta = struct.unpack('<H2xIIIIII', data[ptr:ptr+28]); ptr += 28
+        # --- ID/EX (24B) ---
+        # Fields: Ctrl(4), PC(4), RS1(4), RS2(4), Imm(4), Meta(4)
+        id_ctrl, id_pc, id_rs1, id_rs2, id_imm, id_meta = struct.unpack('<IIIIII', data[ptr:ptr+24]); ptr += 24
+        
         stage_id = StageIDEX(
-            reg_write = bool((id_ctrl >> 11) & 1),
-            mem_write = bool((id_ctrl >> 10) & 1),
-            mem_read  = bool((id_ctrl >> 9) & 1),
+            # Control Decoding (12 bits)
+            reg_write   = bool((id_ctrl >> 11) & 1),
+            mem_write   = bool((id_ctrl >> 10) & 1),
+            mem_read    = bool((id_ctrl >> 9) & 1),
             alu_src_imm = bool((id_ctrl >> 8) & 1),
-            alu_intent = (id_ctrl >> 6) & 0x03,
-            rd_src    = (id_ctrl >> 4) & 0x03,
-            is_branch = bool((id_ctrl >> 3) & 1),
-            is_jal    = bool((id_ctrl >> 2) & 1),
-            is_jalr   = bool((id_ctrl >> 1) & 1),
-            is_halt   = bool(id_ctrl & 1),
-            pc=id_pc, pc4=id_pc4, rs1_data=id_rs1, rs2_data=id_rs2, imm=id_imm,
+            alu_intent  = (id_ctrl >> 6) & 0x03,
+            rd_src      = (id_ctrl >> 4) & 0x03,
+            is_branch   = bool((id_ctrl >> 3) & 1),
+            is_jal      = bool((id_ctrl >> 2) & 1),
+            is_jalr     = bool((id_ctrl >> 1) & 1),
+            is_halt     = bool((id_ctrl >> 0) & 1),
+            # Data
+            pc=id_pc, rs1_data=id_rs1, rs2_data=id_rs2, imm=id_imm,
+            # Meta Decoding (25 bits)
             rs1_addr = (id_meta >> 20) & 0x1F,
             rs2_addr = (id_meta >> 15) & 0x1F,
             rd_addr  = (id_meta >> 10) & 0x1F,
             funct3   = (id_meta >> 7) & 0x07,
-            funct7   = id_meta & 0x7F
+            funct7   = (id_meta) & 0x7F
         )
 
         # --- EX/MEM (16B) ---
-        ex_packed, ex_alu, ex_store, ex_pc4 = struct.unpack('<H2xIII', data[ptr:ptr+16]); ptr += 16
-        ex_ctrl = (ex_packed >> 8) & 0x3F
-        ex_meta = ex_packed & 0xFF
+        # Fields: CtrlMeta(4), ALU(4), Store(4), PC(4)
+        ex_cm, ex_alu, ex_store, ex_pc = struct.unpack('<IIII', data[ptr:ptr+16]); ptr += 16
+        
         stage_ex = StageEXMEM(
-            reg_write = bool((ex_ctrl >> 5) & 1),
-            mem_write = bool((ex_ctrl >> 4) & 1),
-            mem_read  = bool((ex_ctrl >> 3) & 1),
-            rd_src    = (ex_ctrl >> 1) & 0x03,
-            is_halt   = bool(ex_ctrl & 1),
-            alu_res=ex_alu, store_val=ex_store, pc4=ex_pc4,
-            rd_addr   = (ex_meta >> 3) & 0x1F,
-            funct3    = ex_meta & 0x07
+            # Control (High bits of ex_cm)
+            reg_write = bool((ex_cm >> 13) & 1),
+            mem_write = bool((ex_cm >> 12) & 1),
+            mem_read  = bool((ex_cm >> 11) & 1),
+            rd_src    = (ex_cm >> 9) & 0x03,
+            is_halt   = bool((ex_cm >> 8) & 1),
+            # Data
+            alu_res=ex_alu, store_data=ex_store, pc=ex_pc,
+            # Meta (Low bits)
+            rd_addr   = (ex_cm >> 3) & 0x1F,
+            funct3    = (ex_cm) & 0x07
         )
 
         # --- MEM/WB (16B) ---
-        wb_packed, wb_alu, wb_mem, wb_pc4 = struct.unpack('<H2xIII', data[ptr:ptr+16]); ptr += 16
-        wb_ctrl = (wb_packed >> 5) & 0x0F
-        wb_meta = wb_packed & 0x1F
+        # Fields: CtrlMeta(4), Exec(4), Read(4), PC(4)
+        wb_cm, wb_exec, wb_read, wb_pc = struct.unpack('<IIII', data[ptr:ptr+16]); ptr += 16
+        
         stage_wb = StageMEMWB(
-            reg_write = bool((wb_ctrl >> 3) & 1),
-            rd_src    = (wb_ctrl >> 1) & 0x03,
-            is_halt   = bool(wb_ctrl & 1),
-            alu_res=wb_alu, mem_data=wb_mem, pc4=wb_pc4,
-            rd_addr   = wb_meta
+            # Control
+            reg_write = bool((wb_cm >> 8) & 1),
+            rd_src    = (wb_cm >> 6) & 0x03,
+            is_halt   = bool((wb_cm >> 5) & 1),
+            # Data
+            exec_data=wb_exec, read_data=wb_read, pc=wb_pc,
+            # Meta
+            rd_addr   = (wb_cm) & 0x1F
         )
 
         # --- Memory ---
