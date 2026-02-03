@@ -7,6 +7,7 @@
 
 module control_unit (
     input  logic [6:0] opcode_i,
+    input  logic       force_nop_i,   // When high, overrides all outputs to NOPs
 
     // Flow Control Flags
     output logic       is_halt,      // 1 = Halt Execution (ecall)
@@ -20,7 +21,7 @@ module control_unit (
 
     // Writeback Control
     output logic       reg_write_en,    // 1 = Write to Register File
-    output logic [1:0] rd_src_optn,  // 00=ALU, 01=PC+4, 10=Mem
+    output logic       rd_src_optn,     // 0=ALU, 1=Mem
 
     // Execution / ALU Control
     output logic [1:0] alu_intent,   // 00=Add, 01=Sub, 10=R-Type, 11=I-Type
@@ -48,10 +49,9 @@ module control_unit (
         ALU_ITY     = 2'b11;
 
     // Writeback Source
-    localparam logic [1:0]
-        WB_ALU      = 2'b00,
-        WB_PC_PLUS4 = 2'b01,
-        WB_MEM      = 2'b10;
+    localparam logic
+        WB_ALU      = 1'b00,
+        WB_MEM      = 1'b1;
 
     always_comb begin
         // Default Safety State (NOP behavior)
@@ -59,79 +59,76 @@ module control_unit (
         is_branch    = 1'b0;
         is_jal       = 1'b0;
         is_jalr      = 1'b0;
-        mem_write_en    = 1'b0;
-        mem_read_en     = 1'b0;
-        reg_write_en    = 1'b0;
+        mem_write_en = 1'b0;
+        mem_read_en  = 1'b0;
+        reg_write_en = 1'b0;
         rd_src_optn  = WB_ALU;
         alu_intent   = ALU_ADD;
         alu_src_optn = 1'b0;
 
-        case (opcode_i)
-            OP_R_TYPE: begin
-                reg_write_en    = 1'b1;
-                alu_intent   = ALU_RTY; // Delegate to funct3/7
-                rd_src_optn  = WB_ALU;
-                alu_src_optn = 1'b0;    // Operand B = Register
-            end
+        if (!force_nop_i) begin
+            case (opcode_i)
+                OP_R_TYPE: begin
+                    reg_write_en    = 1'b1;
+                    alu_intent      = ALU_RTY;
+                    rd_src_optn     = WB_ALU;
+                    alu_src_optn    = 1'b0;
+                end
 
-            OP_I_TYPE: begin
-                reg_write_en    = 1'b1;
-                alu_intent   = ALU_ITY; // Delegate to funct3
-                rd_src_optn  = WB_ALU;
-                alu_src_optn = 1'b1;    // Operand B = Immediate
-            end
+                OP_I_TYPE: begin
+                    reg_write_en    = 1'b1;
+                    alu_intent      = ALU_ITY;
+                    rd_src_optn     = WB_ALU;
+                    alu_src_optn    = 1'b1;
+                end
 
-            OP_LOAD: begin
-                reg_write_en    = 1'b1;
-                mem_read_en     = 1'b1;
-                rd_src_optn  = WB_MEM;  // Select Memory Data
-                alu_intent   = ALU_ADD; // Calc Addr: Base + Imm
-                alu_src_optn = 1'b1;
-            end
+                OP_LOAD: begin
+                    reg_write_en    = 1'b1;
+                    mem_read_en     = 1'b1;
+                    rd_src_optn     = WB_MEM;
+                    alu_intent      = ALU_ADD;
+                    alu_src_optn    = 1'b1;
+                end
 
-            OP_STORE: begin
-                mem_write_en    = 1'b1;
-                alu_intent   = ALU_ADD; // Calc Addr: Base + Imm
-                alu_src_optn = 1'b1;
-            end
+                OP_STORE: begin
+                    mem_write_en    = 1'b1;
+                    alu_intent      = ALU_ADD;
+                    alu_src_optn    = 1'b1;
+                end
 
-            OP_BRANCH: begin
-                is_branch    = 1'b1;
-                alu_intent   = ALU_SUB; // Compare (Rs1 - Rs2)
-                alu_src_optn = 1'b0;    // Compare two registers
-            end
+                OP_BRANCH: begin
+                    is_branch       = 1'b1;
+                    alu_intent      = ALU_SUB;
+                    alu_src_optn    = 1'b0;
+                end
 
-            OP_JAL: begin
-                is_jal       = 1'b1;
-                reg_write_en    = 1'b1;
-                rd_src_optn  = WB_PC_PLUS4; // Link Register
-                // Note: JAL target is calc'd by imm_pc_adder, not ALU.
-                // ALU signals are don't care, defaults are safe.
-            end
+                OP_JAL: begin
+                    is_jal          = 1'b1;
+                    reg_write_en    = 1'b1;
+                end
 
-            OP_JALR: begin
-                is_jalr      = 1'b1;
-                reg_write_en    = 1'b1;
-                rd_src_optn  = WB_PC_PLUS4; // Link Register
-                alu_intent   = ALU_ADD;     // Target = Rs1 + Imm
-                alu_src_optn = 1'b1;
-            end
+                OP_JALR: begin
+                    is_jalr         = 1'b1;
+                    reg_write_en    = 1'b1;
+                    alu_intent      = ALU_ADD;
+                    alu_src_optn    = 1'b1;
+                end
 
-            OP_LUI: begin
-                reg_write_en    = 1'b1;
-                rd_src_optn  = WB_ALU;
-                alu_intent   = ALU_ADD; // Adds Imm to x0 (hardwired 0)
-                alu_src_optn = 1'b1;
-            end
-            
-            OP_SYSTEM: begin
-                is_halt = 1'b1;
-            end
+                OP_LUI: begin
+                    reg_write_en    = 1'b1;
+                    rd_src_optn     = WB_ALU;
+                    alu_intent      = ALU_ADD;
+                    alu_src_optn    = 1'b1;
+                end
 
-            default: begin
-                // Maintain defaults
-            end
-        endcase
+                OP_SYSTEM: begin
+                    is_halt         = 1'b1;
+                end
+
+                default: begin
+                    // Maintain defaults
+                end
+            endcase
+        end
     end
-
 endmodule

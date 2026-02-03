@@ -15,8 +15,8 @@ module alu (
     always_comb begin
         case (alu_operation_i)
             // --- Arithmetic Operations ---
-            4'b0000: alu_result_o = alu_op1_i + alu_op2_i;       // ADD
-            4'b1000: alu_result_o = alu_op1_i - alu_op2_i;       // SUB
+            4'b0000: alu_result_o = alu_op1_i + alu_op2_i;         // ADD
+            4'b1000: alu_result_o = alu_op1_i - alu_op2_i;           // SUB
             
             // --- Shift Operations ---
             // Only lower 5 bits of op2 are used for 32-bit shifts
@@ -46,7 +46,7 @@ module alu (
             4'b0100: alu_result_o = alu_op1_i ^ alu_op2_i;       // XOR
             4'b0110: alu_result_o = alu_op1_i | alu_op2_i;       // OR
             4'b0111: alu_result_o = alu_op1_i & alu_op2_i;       // AND
-
+            4'b1111: alu_result_o = 32'hFFFFFFFF;                // We output all ones. This is just useful for debugging.
             // --- Default ---
             default: alu_result_o = 32'b0;
         endcase

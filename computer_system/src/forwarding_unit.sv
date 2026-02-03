@@ -5,69 +5,49 @@
 // -----------------------------------------------------------------------------
 
 module forwarding_unit (
-    // Inputs: Current Requirements (ID/EX Stage)
-    input  logic [4:0] rs1_id_ex_i,
-    input  logic [4:0] rs2_id_ex_i,
+    // Inputs from Decode Stage (Current Instruction in ID)
+    input  logic [4:0] rs1_id_i,
+    input  logic [4:0] rs2_id_i,
+    
+    // Inputs from Execute Stage (Previous Instruction)
+    input  logic       reg_write_ex_i, // Is EX stage instruction writing to a register?
+    input  logic [4:0] rd_ex_i,        // Destination Register
 
-    // Inputs: Stage 3 Producer (EX/MEM Stage)
-    input  logic [4:0] rd_ex_mem_i,
-    input  logic       reg_write_ex_mem_en,
-    input  logic       mem_read_ex_mem_en, // Load indicator
+    // Inputs from Memory Stage (2nd Previous Instruction)
+    input  logic       reg_write_mem_i, // Is MEM stage instruction writing to a register?
+    input  logic [4:0] rd_mem_i,        // Destination Register
 
-    // Inputs: Stage 4 Producer (MEM/WB Stage)
-    input  logic [4:0] rd_mem_wb_i,
-    input  logic       reg_write_mem_wb_en,
+    // Inputs from Write-Back Stage (3rd Previous Instruction)
+    input  logic       reg_write_wb_i, // Is WB stage instruction writing to a register?
+    input  logic [4:0] rd_wb_i,        // Destination Register
 
-    // Outputs: Mux Control Signals
-    output logic [1:0] forward_a_optn_o, // 00: Reg, 01: WB, 10: ALU
-    output logic [1:0] forward_b_optn_o
+    // Forwarding Outputs
+    output logic [1:0] forward_rs1_o,        // Forwarding control for RS1's bypased data
+    output logic [1:0] forward_rs2_o         // Forwarding control for RS2's bypased data
 );
 
-    // -------------------------------------------------------------------------
-    // Forwarding Logic for Operand A (RS1)
-    // -------------------------------------------------------------------------
+    // Forwarding Logic
     always_comb begin
-        // Priority 1: EX Hazard
-        // If the previous instruction (in EX/MEM) writes to RS1, is not x0,
-        // and is NOT a Load (mem_read == 0).
-        if (reg_write_ex_mem_en &&
-           (rd_ex_mem_i != 5'b0) &&
-           (rd_ex_mem_i == rs1_id_ex_i)) begin
-            forward_a_optn_o = 2'b10; // Forward from ALU Result
+        // Default values
+        forward_rs1_o = 2'b00;
+        forward_rs2_o = 2'b00;
 
-        // Priority 2: MEM Hazard
-        // If the 2nd previous instruction (in MEM/WB) writes to RS1, is not x0.
-        // Note: The 'else' ensures we don't double-forward if EX hazard exists.
-        end else if (reg_write_mem_wb_en &&
-                    (rd_mem_wb_i != 5'b0) &&
-                    (rd_mem_wb_i == rs1_id_ex_i)) begin
-            forward_a_optn_o = 2'b01; // Forward from Writeback
-
-        // Default: No Hazard
-        end else begin
-            forward_a_optn_o = 2'b00; // Use Register File value
+        // RS1 forwarding
+        if (reg_write_ex_i && (rd_ex_i != 5'b0) && (rd_ex_i == rs1_id_i)) begin
+            forward_rs1_o = 2'b11; // Forward from EX
+        end else if (reg_write_mem_i && (rd_mem_i != 5'b0) && (rd_mem_i == rs1_id_i)) begin
+            forward_rs1_o = 2'b01; // Forward from MEM
+        end else if (reg_write_wb_i && (rd_wb_i != 5'b0) && (rd_wb_i == rs1_id_i)) begin
+            forward_rs1_o = 2'b10; // Forward from WB
         end
-    end
 
-    // -------------------------------------------------------------------------
-    // Forwarding Logic for Operand B (RS2)
-    // -------------------------------------------------------------------------
-    always_comb begin
-        // Priority 1: EX Hazard
-        if (reg_write_ex_mem_en &&
-           (rd_ex_mem_i != 5'b0) &&
-           (rd_ex_mem_i == rs2_id_ex_i)) begin
-            forward_b_optn_o = 2'b10; // Forward from ALU Result
-
-        // Priority 2: MEM Hazard
-        end else if (reg_write_mem_wb_en &&
-                    (rd_mem_wb_i != 5'b0) &&
-                    (rd_mem_wb_i == rs2_id_ex_i)) begin
-            forward_b_optn_o = 2'b01; // Forward from Writeback
-
-        // Default: No Hazard
-        end else begin
-            forward_b_optn_o = 2'b00; // Use Register File value
+        // RS2 forwarding
+        if (reg_write_ex_i && (rd_ex_i != 5'b0) && (rd_ex_i == rs2_id_i)) begin
+            forward_rs2_o = 2'b01; // Forward from EX
+        end else if (reg_write_mem_i && (rd_mem_i != 5'b0) && (rd_mem_i == rs2_id_i)) begin
+            forward_rs2_o = 2'b10; // Forward from MEM
+        end else if (reg_write_wb_i && (rd_wb_i != 5'b0) && (rd_wb_i == rs2_id_i)) begin
+            forward_rs2_o = 2'b11; // Forward from WB
         end
     end
 

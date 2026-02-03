@@ -11,10 +11,8 @@ module pipeline_register #(
     input  logic             rst_n,      // Asynchronous Reset (Active Low)
 
     // Flow Control
-    input  logic             flush_i,        // Synchronous Clear (High Priority)
-    input  logic             global_flush_i, // Global Flush Signal (Optional)
-    input  logic             write_en_i,     // 0 = Stall (Low Priority)
-    input logic              bubble_i,
+    input  logic             soft_reset_i, 
+    input  logic             write_en_i,     
 
     // Data Path
     input  logic [WIDTH-1:0] data_i,
@@ -25,13 +23,15 @@ module pipeline_register #(
         if (!rst_n) begin
             data_o <= {WIDTH{1'b0}}; // Asynchronous Reset
         end
-        else if (flush_i || global_flush_i) begin
-            data_o <= {WIDTH{1'b0}}; // Synchronous Flush (Insert Bubble/NOP)
+        else if (soft_reset_i) begin
+            data_o <= {WIDTH{1'b0}}; // Synchronous Reset
         end
         else if (write_en_i) begin
-            data_o <= data_i;        // Update if NOT Stalled
+            data_o <= data_i;        // Update if write enabled
         end
-        // else: Implicitly hold current value (Stall)
+        else begin 
+            data_o <= data_o;        // If not writing, hold the value (Stall)
+        end
     end
 
 endmodule

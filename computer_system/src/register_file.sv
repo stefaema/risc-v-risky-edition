@@ -12,14 +12,17 @@ module register_file #(
 )(
     input  logic        clk,
     input  logic        rst_n,
-    
-    // Read Ports
     input  logic soft_reset_i,
+
+    // Read Ports
     input  logic [4:0]  rs1_addr_i,
     input  logic [4:0]  rs2_addr_i,
-    input  logic [4:0]  rs_dbg_addr_i, // For debug purposes
+
     output logic [REG_WIDTH-1:0] rs1_data_o,
     output logic [REG_WIDTH-1:0] rs2_data_o,
+
+    // For debug purposes
+    input  logic [4:0]  rs_dbg_addr_i, 
     output logic [REG_WIDTH-1:0] rs_dbg_data_o,
 
     // Write Port
@@ -43,18 +46,17 @@ module register_file #(
     // Write Logic (Synchronous)
     always_ff @(negedge clk or negedge rst_n) begin // Active low clk in order to avoid data hazards
         if (!rst_n) begin
-            // Reset all registers to 0
             for (i = 0; i < 32; i++) begin
-                reg_file[i] <= 32'b0;
+                reg_file[i] <= 32'b0;               // Asynchronous Reset
             end
         end else if (soft_reset_i) begin
-            // On global flush, reset all registers to 0
+            
             for (i = 0; i < 32; i++) begin
-                reg_file[i] <= 32'b0;
+                reg_file[i] <= 32'b0;               // Synchronous Reset
             end
         end else if (reg_write_en && (rd_addr_i != 5'b0)) begin
-            // Write only if enabled and destination is NOT x0
-            reg_file[rd_addr_i] <= write_data_i;
+
+            reg_file[rd_addr_i] <= write_data_i;    // Write Data (if not x0 and write enabled)
         end
     end
 

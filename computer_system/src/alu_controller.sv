@@ -22,18 +22,19 @@ module alu_controller (
         OP_SRL  = 4'b0101,
         OP_SRA  = 4'b1101,
         OP_OR   = 4'b0110,
-        OP_AND  = 4'b0111;
+        OP_AND  = 4'b0111,
+        OP_NOT_USED = 4'b1111; // As some calculations happen outside ALU, we define a NOT_USED code for debugging purposes.
 
     always_comb begin
         // Default safe assignment
         alu_operation_o = OP_ADD; 
 
         case (alu_intent)
-            // 00: Load, Store, Jump (JAL/JALR) -> Force ADD (calc address)
+            // 00: Load, Store -> Force ADD (calc address). Not useful in JMP instr as calculation is done in ID.
             2'b00: alu_operation_o = OP_ADD;
 
             // 01: Branch -> Force SUB (for comparison)
-            2'b01: alu_operation_o = OP_SUB;
+            2'b01: alu_operation_o = OP_NOT_USED; // Branch comparisons are done in ID.
 
             // 10 (R-Type) and 11 (I-Type)
             default: begin

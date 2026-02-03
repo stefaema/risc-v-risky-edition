@@ -19,14 +19,22 @@ module program_counter_reg #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            pc_o <= {PC_WIDTH{1'b0}}; // Reset PC to 0
+
+            pc_o <= {PC_WIDTH{1'b0}};  // Asynchronous Reset
+
         end else if (write_en_i) begin
-            pc_o <= pc_i;
+
+            pc_o <= pc_i;              // Update if write enabled
+
         end else if (soft_reset_i) begin
-            pc_o <= {PC_WIDTH{1'b0}}; // Flush to zero on global flush
+
+            pc_o <= {PC_WIDTH{1'b0}}; // Synchronous Reset
+
         end
         else begin
-            pc_o <= pc_o; // Hold value when stalled
+
+            pc_o <= pc_o;             // If not writing, hold the value (Stall)
+
         end
     end
 

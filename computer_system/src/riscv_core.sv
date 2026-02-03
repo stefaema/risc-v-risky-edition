@@ -9,7 +9,7 @@ module riscv_core (
     input  logic        rst_ni,
 
     // Flow Control
-    input  logic        global_stall_i,
+    input  logic        global_freeze_i,
     input  logic        soft_reset_i,
 
     // Instruction Memory Interface
@@ -44,108 +44,7 @@ module riscv_core (
     // Internal Signals Definition
     // =========================================================================
 
-    // --- Fetch Stage (IF) ---
-    logic [31:0] pc_f;
-    logic [31:0] pc_next_f;
-    logic [31:0] pc_plus_4_f;
-    logic [31:0] instr_f;
-    logic        pc_write_en;
-
-    // --- Decode Stage (ID) ---
-    logic [31:0] pc_d;
-    logic [31:0] instr_d;
-    logic [31:0] pc_plus_4_d; 
-
-    logic [6:0]  opcode_d;
-    logic [4:0]  rd_addr_d;
-    logic [2:0]  funct3_d;
-    logic [4:0]  rs1_addr_d;
-    logic [4:0]  rs2_addr_d;
-    logic [6:0]  funct7_d;
-
-    logic [31:0] rs1_data_d;
-    logic [31:0] rs2_data_d;
-    logic [31:0] imm_d;
-
-    // Control Signals (ID)
-    logic is_halt_d, is_branch_d, is_jal_d, is_jalr_d;
-    logic mem_write_d, mem_read_d, reg_write_d;
-    logic [1:0] rd_src_optn_d;
-    logic [1:0] alu_intent_d;
-    logic alu_src_optn_d;
-
-    // --- Execute Stage (EX) ---
-    logic [31:0] pc_e;
-    logic [31:0] pc_plus_4_e;
-    logic [31:0] rs1_data_e;
-    logic [31:0] rs2_data_e;
-    logic [31:0] imm_e;
-    logic [4:0]  rs1_addr_e;
-    logic [4:0]  rs2_addr_e;
-    logic [4:0]  rd_addr_e;
-    logic [2:0]  funct3_e;
-    logic [6:0]  funct7_e;
-
-    // Control Signals (EX)
-    logic is_halt_e, is_branch_e, is_jal_e, is_jalr_e;
-    logic mem_write_e, mem_read_e, reg_write_e;
-    logic [1:0] rd_src_optn_e;
-    logic [1:0] alu_intent_e;
-    logic alu_src_optn_e;
-
-    // ALU & Flow Logic
-    logic [31:0] forward_a_val_e;
-    logic [31:0] forward_b_val_e;
-    logic [31:0] alu_op2_val_e;
-    logic [3:0]  alu_operation_e;
-    logic [31:0] alu_result_e;
-    logic        zero_flag_e;
-    logic [31:0] pc_imm_target_e;
-    logic [31:0] final_target_addr_e;
-    logic        pc_src_optn_e;
-    logic        redirect_req_e;
-    logic        halt_detected_e;
-
-    // --- Memory Stage (MEM) ---
-    logic [31:0] pc_plus_4_m;
-    logic [31:0] alu_result_m;
-    logic [31:0] store_data_m; // Forwarded rs2_data
-    logic [4:0]  rd_addr_m;
-    logic [2:0]  funct3_m;
-    
-    // Control Signals (MEM)
-    logic is_halt_m;
-    logic mem_write_m, mem_read_m, reg_write_m;
-    logic [1:0] rd_src_optn_m;
-
-    logic [31:0] ram_write_data_m; // Aligned
-    logic [31:0] final_read_data_m; // From Mem Interface
-    
-    // Range Tracker Outputs
-    logic [31:0] tracker_min_addr;
-    logic [31:0] tracker_max_addr;
-
-    // --- Writeback Stage (WB) ---
-    logic [31:0] pc_plus_4_w;
-    logic [31:0] alu_result_w;
-    logic [31:0] final_read_data_w;
-    logic [4:0]  rd_addr_w;
-
-    // Control Signals (WB)
-    logic is_halt_w;
-    logic reg_write_w;
-    logic [1:0] rd_src_optn_w;
-
-    logic [31:0] final_rd_data_w; // Data to write to RegFile
-
-    // --- Hazard & Forwarding Signals ---
-    logic [1:0] forward_a_optn;
-    logic [1:0] forward_b_optn;
-    
-    logic if_id_write_en;
-    logic if_id_flush;
-    logic id_ex_write_en;
-    logic id_ex_flush;
+´   // Placeholder for internal signals
 
     // =========================================================================
     // Stage 1: Instruction Fetch (IF)
@@ -155,7 +54,7 @@ module riscv_core (
     mux2 #(.WIDTH(32)) pc_src_selector (
         .d0_i   (pc_plus_4_f),
         .d1_i   (final_target_addr_e),
-        .sel_i  (pc_src_optn_e),
+        .sel_i  (flow_change),
         .data_o (pc_next_f)
     );
 
@@ -163,14 +62,14 @@ module riscv_core (
     program_counter_reg #(.PC_WIDTH(32)) pc_reg_inst (
         .clk            (clk_i),
         .rst_n          (rst_ni),
-        .write_en_i     (pc_write_en && !global_stall_i),
-        .soft_reset_i (soft_reset_i),
+        .write_en_i     (!freeze_i && !global_freeze_i),
+        .soft_reset_i   (soft_reset_i),
         .pc_i           (pc_next_f),
         .pc_o           (pc_f)
     );
 
     // PC + 4 Adder
-    adder #(.ADDER_WIDTH(32)) fixed_pc_adder_inst (
+    adder fixed_pc_adder_inst (
         .adder_op1_i (pc_f),
         .adder_op2_i (32'd4),
         .sum_o       (pc_plus_4_f)
