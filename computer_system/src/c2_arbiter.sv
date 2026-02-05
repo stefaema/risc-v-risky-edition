@@ -32,8 +32,10 @@ module c2_arbiter (
     output logic        debug_exec_mode_o, // 0 = Step, 1 = Continuous
     input  logic        debug_done_i,
     // Dumper UART TX Taps (Dumper operates under Debug Grant)
-    input  logic [7:0] dumper_tx_data_i,
-    input  logic        dumper_tx_start_i
+    input  logic [7:0]  dumper_tx_data_i,
+    input  logic        dumper_tx_start_i,
+    // LED
+    output logic        c2_waiting_o
 );
 
     // -------------------------------------------------------------------------
@@ -101,6 +103,7 @@ module c2_arbiter (
         logic arb_tx_start; 
 
         // Default Assignments
+        c2_waiting_o          = 1'b0;
         next_state            = state;
         internal_grant_loader = 1'b0;
         internal_grant_debug  = 1'b0;
@@ -109,6 +112,7 @@ module c2_arbiter (
 
         case (state)
             S_IDLE: begin
+                c2_waiting_o = 1'b1;
                 if (uart_rx_ready_i) begin
                     if (uart_rx_data_i == CMD_LOAD_CODE || 
                         uart_rx_data_i == CMD_LOAD_DATA || 
@@ -120,12 +124,14 @@ module c2_arbiter (
             end
 
             S_ACK_TRIGGER: begin
+                c2_waiting_o = 1'b1;
                 arb_tx_start = 1'b1;
                 next_state   = S_WAIT_ACK;
             end
 
             S_WAIT_ACK: begin
                 // Blocking wait: Do not proceed until the ACK byte has fully left the UART.
+                c2_waiting_o = 1'b1;
                 if (uart_tx_done_i) begin
                     next_state = S_BUSY;
                 end
@@ -148,6 +154,7 @@ module c2_arbiter (
             end
 
             S_RECOVERY: begin
+                soft_reset_o = 1'b1;
                 next_state = S_IDLE;
             end
 

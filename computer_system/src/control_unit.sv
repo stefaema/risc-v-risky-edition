@@ -50,7 +50,7 @@ module control_unit (
 
     // Writeback Source
     localparam logic
-        WB_ALU      = 1'b00,
+        WB_ALU      = 1'b0,
         WB_MEM      = 1'b1;
 
     always_comb begin

@@ -148,7 +148,6 @@ module debug_unit (
             // -----------------------------------------------------------------
             S_WAIT_DUMP: begin
                 cpu_stall_o = 1'b1;
-                // Keep mode stable for Dumper
                 if (latched_exec_mode) dump_mem_mode_o = 1'b1;
                 else              dump_mem_mode_o = 1'b0;
 

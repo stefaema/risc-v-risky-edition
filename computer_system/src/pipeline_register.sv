@@ -12,6 +12,7 @@ module pipeline_register #(
 
     // Flow Control
     input  logic             soft_reset_i, 
+    
     input  logic             write_en_i,     
 
     // Data Path

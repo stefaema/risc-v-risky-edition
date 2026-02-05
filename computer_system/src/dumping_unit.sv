@@ -25,23 +25,26 @@ module dumping_unit (
     input  logic [31:0] rf_dbg_data_i,
 
     // Flattened Pipeline Taps
-    // Updated widths based on riscv_core.sv definitions
     input  logic [95:0]  if_id_flat_i,
-    input  logic [163:0] id_ex_flat_i,  // Changed from 197 to 164
-    input  logic [108:0] ex_mem_flat_i, // Changed from 110 to 109
-    input  logic [103:0] mem_wb_flat_i, // Changed from 105 to 104
+    input  logic [163:0] id_ex_flat_i, 
+    input  logic [108:0] ex_mem_flat_i,
+    input  logic [103:0] mem_wb_flat_i, 
     input  logic [15:0]  hazard_status_i,
 
     // Memory Interface
-    output logic        dump_needs_mem_o,
     output logic [31:0] dmem_addr_o,
     input  logic [31:0] dmem_data_i,
+
     // Snooping Signals (from MEM stage/Tracker)
     input  logic        dmem_write_en_snoop_i,
+    input  logic [3:0]  dmem_byte_en_snoop_i,
     input  logic [31:0] dmem_addr_snoop_i,
     input  logic [31:0] dmem_write_data_snoop_i, 
     input  logic [31:0] min_addr_i,
-    input  logic [31:0] max_addr_i
+    input  logic [31:0] max_addr_i,
+
+    // LED
+    output logic dumping_o
 );
 
     // -------------------------------------------------------------------------
@@ -64,29 +67,25 @@ module dumping_unit (
     logic [10:0] id_ex_ctrl;
     logic [31:0] id_ex_pc, id_ex_rs1, id_ex_rs2, id_ex_imm;
     logic [24:0] id_ex_meta;
-    logic [31:0] id_ex_pc4; // Reconstruction
     
     assign {id_ex_ctrl, id_ex_pc, id_ex_rs1, id_ex_rs2, id_ex_imm, id_ex_meta} = id_ex_flat_i;
-    assign id_ex_pc4 = id_ex_pc + 32'd4; 
+
 
     // EX/MEM (109 bits): {Ctrl(5), ExecData(32), StoreData(32), PC(32), Meta(8)}
-    // Note: Core passes PC, not PC+4.
     logic [4:0]  ex_mem_ctrl;
     logic [31:0] ex_mem_alu, ex_mem_store_data, ex_mem_pc;
     logic [7:0]  ex_mem_meta;
-    logic [31:0] ex_mem_pc4; // Reconstruction
 
     assign {ex_mem_ctrl, ex_mem_alu, ex_mem_store_data, ex_mem_pc, ex_mem_meta} = ex_mem_flat_i;
-    assign ex_mem_pc4 = ex_mem_pc + 32'd4;
+
 
     // MEM/WB (104 bits): {Ctrl(3), ExecData(32), ReadData(32), PC(32), Meta(5)}
     logic [2:0]  mem_wb_ctrl;
     logic [31:0] mem_wb_alu, mem_wb_read_data, mem_wb_pc;
     logic [4:0]  mem_wb_meta;
-    logic [31:0] mem_wb_pc4; // Reconstruction
 
     assign {mem_wb_ctrl, mem_wb_alu, mem_wb_read_data, mem_wb_pc, mem_wb_meta} = mem_wb_flat_i;
-    assign mem_wb_pc4 = mem_wb_pc + 32'd4;
+
 
     // --- 2. Serialization Array Construction (Spec 10.5.3) ---
     // We map all pipeline data into a uniform 32-bit word array for easier iteration.
@@ -99,7 +98,7 @@ module dumping_unit (
         pipe_dump_words[0]  = {16'h0000, hazard_status_i};
 
         // IF/ID (12 Bytes)
-        pipe_dump_words[1]  = if_id_pc;
+        pipe_dump_words[1]  =   if_id_pc;
         pipe_dump_words[2]  = if_id_instr;
         pipe_dump_words[3]  = if_id_pc4;
 
@@ -108,27 +107,29 @@ module dumping_unit (
         // Pad = 16 (High) + 5 (Low) = 21 bits zero.
         pipe_dump_words[4]  = {16'h0000, 5'b0, id_ex_ctrl}; 
         pipe_dump_words[5]  = id_ex_pc;
-        pipe_dump_words[6]  = id_ex_pc4; // Uses local reconstruction
-        pipe_dump_words[7]  = id_ex_rs1;
-        pipe_dump_words[8]  = id_ex_rs2;
-        pipe_dump_words[9]  = id_ex_imm;
-        pipe_dump_words[10] = {7'b0, id_ex_meta}; // Meta is 25 bits
+        pipe_dump_words[6]  = id_ex_rs1;
+        pipe_dump_words[7]  = id_ex_rs2;
+        pipe_dump_words[8]  = id_ex_imm;
+        pipe_dump_words[9] = {7'b0, id_ex_meta}; // Meta is 25 bits
 
         // EX/MEM (16 Bytes)
         // Spec: Ctrl_Meta (2B + Pad). 
         // Ctrl(5) + Meta(8) = 13 bits. Pad 3 bits.
-        pipe_dump_words[11] = {16'h0000, 3'b0, ex_mem_ctrl, ex_mem_meta};
-        pipe_dump_words[12] = ex_mem_alu;
-        pipe_dump_words[13] = ex_mem_store_data; 
-        pipe_dump_words[14] = ex_mem_pc4; // Uses local reconstruction
+        pipe_dump_words[10] = {16'h0000, 3'b0, ex_mem_ctrl, ex_mem_meta};
+        pipe_dump_words[11] = ex_mem_pc;
+        pipe_dump_words[12] = ex_mem_store_data; 
+        pipe_dump_words[13] = ex_mem_alu;
+
+
 
         // MEM/WB (16 Bytes)
         // Spec: Ctrl_Meta (2B + Pad).
         // Ctrl(3) + Meta(5) = 8 bits. Pad 8 bits.
-        pipe_dump_words[15] = {16'h0000, 8'b0, mem_wb_ctrl, mem_wb_meta};
+        pipe_dump_words[14] = {16'h0000, 8'b0, mem_wb_ctrl, mem_wb_meta};
+        pipe_dump_words[15] = mem_wb_pc;
         pipe_dump_words[16] = mem_wb_alu;
         pipe_dump_words[17] = mem_wb_read_data;
-        pipe_dump_words[18] = mem_wb_pc4; // Uses local reconstruction
+        pipe_dump_words[18] = 32'd0;
     end
 
     // -------------------------------------------------------------------------
@@ -170,21 +171,8 @@ module dumping_unit (
 
     always_comb begin
         current_word_to_send = 32'h0;
-        dump_needs_mem_o     = 1'b0; // Default: Release bus
 
-        // 1. Bus Request Logic
-        if (latched_mode == 1'b1) begin
-            case (state)
-                S_DUMP_MEM_CONFIG_1, // Sending Min Addr
-                S_DUMP_MEM_CONFIG_2, // Sending Max Addr (Pre-fetch data here)
-                S_DUMP_MEM_PAYLOAD:  // Sending Data
-                    dump_needs_mem_o = 1'b1;
-                default: 
-                    dump_needs_mem_o = 1'b0;
-            endcase
-        end
-
-        // 2. Data Multiplexing (Little Endian Slicing)
+        // 1. Data Multiplexing (Little Endian Slicing)
         case (state)
             S_DUMP_REGS:     current_word_to_send = rf_dbg_data_i;
             S_DUMP_PIPELINE: current_word_to_send = pipe_dump_words[pipe_word_idx];
@@ -192,7 +180,7 @@ module dumping_unit (
             // Memory Config Phase
             S_DUMP_MEM_CONFIG_1: begin
                 if (latched_mode == 1'b1) current_word_to_send = min_addr_i; // Continuous
-                else                      current_word_to_send = {31'b0, dmem_write_en_snoop_i}; // Step Flag
+                else                      current_word_to_send = {28'b0, dmem_byte_en_snoop_i}; // Step Flag
             end
             S_DUMP_MEM_CONFIG_2: begin
                 if (latched_mode == 1'b1) current_word_to_send = max_addr_i;
@@ -210,7 +198,7 @@ module dumping_unit (
             default: current_word_to_send = 32'h0;
         endcase
 
-        // 3. Byte Selection
+        // 2. Byte Selection
         case (byte_idx)
             2'd0: selected_byte = current_word_to_send[7:0];
             2'd1: selected_byte = current_word_to_send[15:8];
@@ -250,6 +238,7 @@ module dumping_unit (
     // FSM Next State Logic
     // -------------------------------------------------------------------------
     always_comb begin
+        dumping_o = 1'd1;
         next_state          = state;
         next_return_state   = return_state;
         next_rf_idx         = rf_idx;
@@ -268,6 +257,7 @@ module dumping_unit (
             // Idle
             // -------------------------------------------------------------
             S_IDLE: begin
+                dumping_o = 1'd0;
                 if (dump_trigger_i) begin
                     next_latched_mode = dump_mem_mode_i;
                     next_state = S_SEND_HEADER_ALERT;

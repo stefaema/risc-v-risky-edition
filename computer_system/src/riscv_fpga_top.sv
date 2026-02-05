@@ -1,3 +1,4 @@
+//THIS WAS MY SALVATION.
 // -----------------------------------------------------------------------------
 // Module: riscv_fpga_top
 // Description: Physical Top-Level Container for the RISC-V Computer System.
@@ -5,17 +6,18 @@
 // -----------------------------------------------------------------------------
 
 module riscv_fpga_top (
-    input  logic       sys_clk_i,    // 100 MHz Oscillator (Nexys A7: Pin E3)
-    input  logic       rst_btn_i,    // CPU_RESET (Active Low or High depends on board)
+    input  logic       sys_clk_i,    // 100 MHz Oscillator 
+    input  logic       rst_btn_i,    // CPU_RESET 
     
     // UART (USB)
     input  logic       uart_rx_i,
     output logic       uart_tx_o,
 
     // Status LEDs
-    output logic       led_halt_o,   // Green: ECALL Hit
-    output logic       led_prog_o,   // Blue:  Loader Active
-    output logic       led_debug_o   // Red:   Debug Mode Active
+    output logic       led_wait_o,   // C2 Arbiter is waiting for a cmd
+    output logic       led_prog_o,   // Loader is Active, doing memory work
+    output logic       led_debug_o,  // Debug mode is Active, either CE or DE
+    output logic       led_dumping_o // Both in Debug mode and dumping process happening
 );
 
     // -------------------------------------------------------------------------
@@ -62,10 +64,10 @@ module riscv_fpga_top (
     logic        loader_target; 
     
     // C2 -> Core Control
+    logic        c2_waiting;
     logic        c2_debug_active;
     logic        c2_debug_stall;
     logic        c2_soft_reset;
-    logic        c2_dump_needs_mem;
     logic [31:0] c2_dmem_snoop_addr;
     logic [31:0] c2_dmem_snoop_data;
     logic        core_halted;
@@ -78,6 +80,8 @@ module riscv_fpga_top (
     logic [108:0] ex_mem_flat; // 109 bits
     logic [103:0] mem_wb_flat; // 104 bits
     logic [15:0]  hazard_status;
+
+    logic         dumping;
 
     // -------------------------------------------------------------------------
     // 3. Command & Control (C2) Interface Wrapper
@@ -98,7 +102,6 @@ module riscv_fpga_top (
         .loader_wdata_o      (loader_wdata),
         .loader_target_o     (loader_target),
 
-        .dump_needs_mem_o    (c2_dump_needs_mem),
         .debug_mode_active_o (c2_debug_active),
         .debug_stall_o       (c2_debug_stall),
         .soft_reset_o        (c2_soft_reset),
@@ -115,10 +118,13 @@ module riscv_fpga_top (
         .dmem_addr_o         (c2_dmem_snoop_addr),
         .dmem_data_i         (c2_dmem_snoop_data),
         .dmem_write_en_snoop_i   (core_dmem_we), 
+        .dmem_byte_en_snoop_i    (core_dmem_byte_mask),
         .dmem_addr_snoop_i       (core_dmem_addr),
         .dmem_write_data_snoop_i (core_dmem_wdata),
         .min_addr_i              (core_tracker_min),
-        .max_addr_i              (core_tracker_max)
+        .max_addr_i              (core_tracker_max),
+        .c2_waiting_o            (c2_waiting),
+        .dumping_o               (dumping)
     );
 
     // -------------------------------------------------------------------------
@@ -164,17 +170,17 @@ module riscv_fpga_top (
     // Port A is shared: Loader Writes vs Core Fetches
     logic [31:0] imem_addr_mux;
     logic [31:0] imem_wdata_mux;
-    logic [3:0]  imem_we_mux;
+    logic   imem_we_mux;
 
     always_comb begin
         if (loader_we && (loader_target == 1'b0)) begin
             imem_addr_mux  = loader_addr;
             imem_wdata_mux = loader_wdata;
-            imem_we_mux    = 4'b1111; // 4-bit Write Enable for IP
+            imem_we_mux    = 1'b1; 
         end else begin
             imem_addr_mux  = core_imem_addr;
             imem_wdata_mux = 32'b0;
-            imem_we_mux    = 4'b0000;
+            imem_we_mux    = 1'b0;
         end
     end
 
@@ -198,58 +204,46 @@ module riscv_fpga_top (
     end
 
     // -------------------------------------------------------------------------
-    // 6. Xilinx BRAM IP Instantiation
+    // 6. Instruction & Data Memory
     // -------------------------------------------------------------------------
-    // IP: risky_access_memory
-    // Config: True Dual Port, 32-bit width, Byte Write Enable, 1024 depth
-    
-    // INSTANCE 1: Instruction Memory (Port A used, Port B unused)
-    risky_access_memory imem_inst (
-        // PORT A
-        .clka  (main_clk),
-        .rsta  (sys_rst_sys),   // Active High Reset
-        .ena   (1'b1),          // Always Enable
-        .wea   (imem_we_mux),
-        .addra (imem_addr_mux), // IP takes 32-bit; Logic handles value
-        .dina  (imem_wdata_mux),
-        .douta (core_imem_data),
-        
-        // PORT B (Unused)
-        .clkb  (main_clk),
-        .rstb  (sys_rst_sys),
-        .enb   (1'b0),
-        .web   (4'b0),
-        .addrb (32'b0),
-        .dinb  (32'b0),
-        .doutb () 
-    );
+    // IP: Distributed Memory Generator
+    // Config: Single Port, 32-bit width, 1024 depth
+  
+        instruction_memory imem_inst (
+            .clk   (main_clk),            
+            .we    (imem_we_mux),        
+            
+            // As it's 1024 words deep and uses word addressing, we use 2 to 11 of the 32 bit address.
+            .a     (imem_addr_mux[11:2]), 
+            
+            .d     (imem_wdata_mux),           
 
-    // INSTANCE 2: Data Memory (Port A: Core/Loader, Port B: Dumper)
-    risky_access_memory dmem_inst (
+            .spo   (core_imem_data)
+
+        );
+
+    // Data Memory (Port A: Core/Loader, Port B: Dumper)
+    data_memory dmem_inst (
+        
+        .clk_i  (main_clk),
+
         // PORT A (Core Execution / Loader Injection)
-        .clka  (main_clk),
-        .rsta  (sys_rst_sys),
-        .ena   (1'b1),
-        .wea   (dmem_porta_we),
-        .addra (dmem_porta_addr),
-        .dina  (dmem_porta_wdata),
-        .douta (core_dmem_rdata),
+        .we_a_i    (dmem_porta_we),
+        .addr_a_i  (dmem_porta_addr),
+        .data_a_i  (dmem_porta_wdata),
+        .data_a_o  (core_dmem_rdata),
         
         // PORT B (C2 Dumper Read-Only Access)
-        .clkb  (main_clk),
-        .rstb  (sys_rst_sys),
-        .enb   (c2_dump_needs_mem),  // Enable only when Dumping
-        .web   (4'b0000),            // Never Write
-        .addrb (c2_dmem_snoop_addr),
-        .dinb  (32'b0),
-        .doutb (c2_dmem_snoop_data)  // Goes to C2 Dumper
+        .addr_b_i (c2_dmem_snoop_addr),
+        .data_b_o (c2_dmem_snoop_data)  // Goes to C2 Dumper
     );
 
     // -------------------------------------------------------------------------
     // 7. Status LEDs
     // -------------------------------------------------------------------------
-    assign led_halt_o  = core_halted;
+    assign led_wait_o  = c2_waiting;
     assign led_prog_o  = loader_we; 
     assign led_debug_o = c2_debug_active;
+    assign led_dumping_o = dumping;
 
 endmodule

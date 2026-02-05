@@ -1,24 +1,24 @@
 # ------------------------------------------------------------------------------
-# Test 3: Load-Use Hazard
+# Test: Load-Use Hazard
 # Verifies hardware stall (bubble insertion) when LW is followed by a USE.
 # ------------------------------------------------------------------------------
 
 main:
-    # Setup: Store a value in memory address 0x100
-    addi x1, x0, 255     # x1 = 0xFF
-    addi x5, x0, 256     # x5 = 0x100 (Address)
-    sw   x1, 0(x5)       # Memory[0x100] = 0xFF
-    
+    # Setup: Assume the value 0x40 is at address x0 already stored
+    addi x1, x0, 256     # x1 = 0x100
+
+
+
     # 1. Load the value
-    lw   x2, 0(x5)       # x2 = 0xFF
+    lb   x2, 0(x0)       # x2 = 0x40
     
     # 2. Immediate Use
     # Hardware MUST stall PC/IF/ID and insert NOP in EX.
-    addi x3, x2, 1       # x3 = 0xFF + 0x1 = 0x100
+    add x3, x2, x1       # x3 = 0x40 + 0x100 = 0x140
     
     ecall
 
 # Should result in:
-# x1 = 0xFF
-# x2 = 0xFF
-# x3 = 0x100 (0x100)
+# x1 = 0x100
+# x2 = 0x40
+# x3 = 0x140

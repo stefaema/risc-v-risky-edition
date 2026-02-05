@@ -1,3 +1,4 @@
+//THIS WAS MY SALVATION.
 // -----------------------------------------------------------------------------
 // Module: riscv_core
 // Description: Top-level RV32I Pipelined Core.
@@ -5,7 +6,7 @@
 // -----------------------------------------------------------------------------
 
 module riscv_core (
-    input  logic        clk_i,
+    input logic        clk_i,
     input  logic        rst_ni,
 
     // Flow Control
@@ -82,6 +83,7 @@ module riscv_core (
     logic        zero_id;
     logic        flow_change;
     
+    logic [31:0] mem_forwarding_data;
     logic [31:0] rs1_data_id; // After Forwarding Mux
     logic [31:0] rs2_data_id; // After Forwarding Mux
     logic [1:0]  forward_rs1_optn;
@@ -107,7 +109,6 @@ module riscv_core (
     logic [31:0] alu_op2_ex;
     logic [3:0]  alu_operation_ex;
     logic [31:0] alu_result_ex;
-    logic        zero_flag_ex;
     logic [31:0] pc_plus_4_ex;
     logic [31:0] rd_data_ex; // Result of EX stage (ALU or PC+4)
 
@@ -141,14 +142,13 @@ module riscv_core (
 
     // Hazard Status
     logic        program_ended;
-    logic        encountered_rs1_forwarding;
-    logic        encountered_rs2_forwarding;
+    logic  [1:0] encountered_rs1_forwarding;
+    logic  [1:0] encountered_rs2_forwarding;
     logic        load_use_hazard;
     logic        control_hazard;
     logic        if_id_write_en; 
-    logic        pc_write_en;
     logic        if_id_flush;
-    logic        id_ex_flush;
+    logic        pc_write_en;
 
 
     // =========================================================================
@@ -156,16 +156,14 @@ module riscv_core (
     // =========================================================================
 
     assign program_ended              = is_halt_wb;
-    assign encountered_rs1_forwarding = (forward_rs1_optn != 2'b00);
-    assign encountered_rs2_forwarding = (forward_rs2_optn != 2'b00);
+    assign encountered_rs1_forwarding = forward_rs1_optn;
+    assign encountered_rs2_forwarding = forward_rs2_optn;
 
     assign load_use_hazard            = data_hzrd_freeze_id && force_nop_id; 
     assign control_hazard             = flow_change;
 
-    assign if_id_flush                = soft_reset_i || flow_change;
-    assign id_ex_flush                = soft_reset_i || flow_change || force_nop_id;
-
     assign if_id_write_en             = !halt_freeze && !data_hzrd_freeze_id && !global_freeze_i;
+    assign if_id_flush                = flow_change  && !global_freeze_i;
     assign pc_write_en                = !halt_freeze && !data_hzrd_freeze_id && !global_freeze_i;
 
 
@@ -214,7 +212,7 @@ module riscv_core (
     pipeline_register #(.WIDTH(96)) if_id_reg (
         .clk             (clk_i),
         .rst_n           (rst_ni),
-        .soft_reset_i    (if_id_flush),
+        .soft_reset_i    (if_id_flush || soft_reset_i),
         .write_en_i      (if_id_write_en),
         .data_i          (if_id_data_in),
         .data_o          (if_id_data_out)
@@ -282,10 +280,13 @@ module riscv_core (
     );
 
     // Forwarding Muxes (Located in ID for Branch Resolution)
+
+    assign mem_forwarding_data = (rd_src_optn_mem) ? rd_data_mem : alu_result_mem;
+
     mux4 rs1_data_selector (
         .d0_i   (rs1_file_data_id),
         .d1_i   (rd_data_ex),
-        .d2_i   (rd_data_mem), // Forwarding from MEM stage result (Load or ALU)
+        .d2_i   (mem_forwarding_data), // Forwarding from MEM stage result (Load or ALU)
         .d3_i   (final_rd_data_wb),
         .sel_i  (forward_rs1_optn),
         .data_o (rs1_data_id)
@@ -294,7 +295,7 @@ module riscv_core (
     mux4 rs2_data_selector (
         .d0_i   (rs2_file_data_id),
         .d1_i   (rd_data_ex),
-        .d2_i   (rd_data_mem),
+        .d2_i   (mem_forwarding_data),
         .d3_i   (final_rd_data_wb),
         .sel_i  (forward_rs2_optn),
         .data_o (rs2_data_id)
@@ -374,7 +375,7 @@ module riscv_core (
     pipeline_register #(.WIDTH(164)) id_ex_reg (
         .clk             (clk_i),
         .rst_n           (rst_ni),
-        .soft_reset_i    (id_ex_flush),
+        .soft_reset_i    (soft_reset_i),
         .write_en_i      (!global_freeze_i),
         .data_i          (id_ex_data_in),
         .data_o          (id_ex_data_out)
@@ -412,8 +413,8 @@ module riscv_core (
         .alu_op1_i       (rs1_data_ex),
         .alu_op2_i       (alu_op2_ex),
         .alu_operation_i (alu_operation_ex),
-        .alu_result_o    (alu_result_ex),
-        .zero_flag_o     (zero_flag_ex)
+        .alu_result_o    (alu_result_ex)
+  
     );
 
     // PC+4 Recalculation for Linking
@@ -549,15 +550,15 @@ module riscv_core (
 
     // Hazard Status Output (16 bits)
     assign tap_hazard_o = {
-        6'b0,                         // [15:10] Padding
-        pc_write_en,                  // [9]     Is PC updating?
-        if_id_write_en,               // [8]     Is IF/ID updating?
-        control_hazard,               // [7]     Branch/Jump taken?
-        load_use_hazard,              // [6]     Stall for Load?
-        encountered_rs2_forwarding,   // [5]     Forwarding happened on RS2?
-        encountered_rs1_forwarding,   // [4]     Forwarding happened on RS1?
-        3'b0,                         // [3:1]   Padding
-        program_ended                 // [0]     Halt reached WB?
+        6'b0,                                    // [15:12] Padding
+        !halt_freeze && !data_hzrd_freeze_id,    // [11]     Is PC updating?
+        !halt_freeze && !data_hzrd_freeze_id,    // [10]     Is IF/ID updating?
+        control_hazard,                          // [9]     Branch/Jump taken?
+        load_use_hazard,                         // [8]     Stall for Load?
+        encountered_rs2_forwarding,              // [7:6]     Forwarding happened on RS2?
+        encountered_rs1_forwarding,              // [5:4]     Forwarding happened on RS1?
+        3'b0,                                    // [3:1]   Padding
+        program_ended                            // [0]     Halt reached WB?
     };
 
 endmodule

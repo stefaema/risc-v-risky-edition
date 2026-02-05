@@ -8,8 +8,7 @@ module alu (
     input  logic [31:0] alu_op1_i,
     input  logic [31:0] alu_op2_i,
     input  logic [3:0]  alu_operation_i,
-    output logic [31:0] alu_result_o,
-    output logic        zero_flag_o
+    output logic [31:0] alu_result_o
 );
 
     always_comb begin
@@ -51,8 +50,5 @@ module alu (
             default: alu_result_o = 32'b0;
         endcase
     end
-
-    // Zero Flag Logic
-    assign zero_flag_o = (alu_result_o == 32'b0);
 
 endmodule

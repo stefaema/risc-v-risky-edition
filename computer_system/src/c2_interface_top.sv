@@ -24,7 +24,6 @@ module c2_interface_top #(
     output logic        loader_target_o, // 0=IMEM, 1=DMEM
 
     // Core Control Interface
-    output logic        dump_needs_mem_o,
     output logic        debug_mode_active_o, // 1 = Debugger has control
     output logic        debug_stall_o,       // 0 = Run, 1 = Pause
     output logic        soft_reset_o,        // System Flush/PC Reset
@@ -36,18 +35,22 @@ module c2_interface_top #(
     input  logic [31:0] rf_dbg_data_i,
     // Pipeline Flat Buses
     input  logic [95:0]  if_id_flat_i,
-    input  logic [196:0] id_ex_flat_i,
-    input  logic [109:0] ex_mem_flat_i,
-    input  logic [104:0] mem_wb_flat_i,
+    input  logic [163:0] id_ex_flat_i,
+    input  logic [108:0] ex_mem_flat_i,
+    input  logic [103:0] mem_wb_flat_i,
     input  logic [15:0]  hazard_status_i,
     // Memory Snooping & Dump Interface
     output logic [31:0] dmem_addr_o,
     input  logic [31:0] dmem_data_i,
     input  logic        dmem_write_en_snoop_i,
+    input  logic [3:0]  dmem_byte_en_snoop_i,
     input  logic [31:0] dmem_addr_snoop_i,
     input  logic [31:0] dmem_write_data_snoop_i,
     input  logic [31:0] min_addr_i,
-    input  logic [31:0] max_addr_i
+    input  logic [31:0] max_addr_i,
+    // LED
+    output logic c2_waiting_o,
+    output logic dumping_o
 );
 
     // -------------------------------------------------------------------------
@@ -61,7 +64,7 @@ module c2_interface_top #(
     // UART Internal Signals
     logic [7:0] uart_rx_data;
     logic       uart_rx_ready;
-    logic       uart_rx_error; // Unused in current arbiter logic, but available
+    logic       uart_rx_error;     // Unused in current arbiter logic, but available
     
     logic [7:0] uart_tx_data;
     logic       uart_tx_start;
@@ -70,9 +73,12 @@ module c2_interface_top #(
 
     // Arbiter <-> Sub-Module Handshakes
     logic grant_loader, grant_debug;
-    logic loader_done, debug_done; // Debug done comes from debug_unit
+    logic loader_done; 
     logic arbiter_loader_target;   // Config from Arbiter
     logic arbiter_debug_mode;      // Config from Arbiter
+    // Arbiter LED
+    logic c2_waiting;
+    assign c2_waiting_o = c2_waiting;
 
     // Loader Signals
     logic [7:0] loader_tx_data;
@@ -87,6 +93,9 @@ module c2_interface_top #(
     logic       dump_done;
     logic [7:0] dumper_tx_data;
     logic       dumper_tx_start;
+
+    logic dumping;
+    assign dumping_o = dumping;
 
     // RX Gating Signals
     logic loader_rx_ready;
@@ -168,7 +177,8 @@ module c2_interface_top #(
 
         // Dumper TX Taps (Dumper operates under Debug Grant)
         .dumper_tx_data_i  (dumper_tx_data),
-        .dumper_tx_start_i (dumper_tx_start)
+        .dumper_tx_start_i (dumper_tx_start),
+        .c2_waiting_o      (c2_waiting)
     );
 
     // Output Assignments
@@ -238,7 +248,6 @@ module c2_interface_top #(
         .dump_trigger_i          (dump_trigger),
         .dump_mem_mode_i         (dump_mem_mode),
         .dump_done_o             (dump_done),
-        .dump_needs_mem_o        (dump_needs_mem_o),
         // UART (TX Master)
         .tx_data_o               (dumper_tx_data),
         .tx_start_o              (dumper_tx_start),
@@ -258,11 +267,14 @@ module c2_interface_top #(
         // Core Taps - Memory
         .dmem_addr_o             (dmem_addr_o),
         .dmem_data_i             (dmem_data_i),
+        .dmem_byte_en_snoop_i    (dmem_byte_en_snoop_i),
         .dmem_write_en_snoop_i   (dmem_write_en_snoop_i),
         .dmem_addr_snoop_i       (dmem_addr_snoop_i),
         .dmem_write_data_snoop_i (dmem_write_data_snoop_i),
         .min_addr_i              (min_addr_i),
-        .max_addr_i              (max_addr_i)
+        .max_addr_i              (max_addr_i),
+
+        .dumping_o               (dumping)
     );
 
 endmodule

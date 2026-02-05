@@ -51,7 +51,7 @@ module baud_rate_generator #(parameter int CLK_FREQ)(
     input logic [1:0] baud_selector_i, 
     output logic tick_16x_o
 );
-    // Pre-calculo de divisores
+    // Divisors
     localparam int DIV_9600   = (CLK_FREQ / (9600   * 16)) - 1;
     localparam int DIV_19200  = (CLK_FREQ / (19200  * 16)) - 1;
     localparam int DIV_57600  = (CLK_FREQ / (57600  * 16)) - 1;
@@ -91,7 +91,8 @@ endmodule
 // -----------------------------------------------------------------------------
 module uart_rx (
     input logic clk_i, rst_ni, rx_i, tick_16x_i,
-    output logic [7:0] data_o, output logic ready_o, error_o
+    output logic [7:0] data_o, 
+    output logic ready_o, error_o
 );
     typedef enum logic [2:0] {S_IDLE, S_START, S_DATA, S_STOP, S_DONE} state_t;
     state_t state, next_state;
@@ -151,6 +152,7 @@ module uart_rx (
                 end else next_tick_cnt = tick_cnt + 1;
             end
             S_DONE: begin ready_o = 1; next_state = S_IDLE; end
+            default: begin end
         endcase
     end
 endmodule
