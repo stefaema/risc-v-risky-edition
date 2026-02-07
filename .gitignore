@@ -34,3 +34,4 @@ Thumbs.db
 
 # --- Custom ---
 /prjc_riscv_fpga
+*.pyc

@@ -175,7 +175,7 @@ def processor_model_svg():
 
     with ui.element('div').classes('w-full h-full overflow-auto bg-black relative p-6'):
         ui.html(f'''
-            <svg id="cpu-svg-diagram" viewBox="0 0 842 595" style="width:100%; height:auto;">
+            <svg id="cpu-svg-diagram" viewBox="0 0 842 595" style="width: 120vw; height: auto; display: block;">
                 {cleaned_svg}
             </svg>
         ''').classes('w-full')

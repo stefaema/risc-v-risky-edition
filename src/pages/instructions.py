@@ -11,7 +11,7 @@ from routing import drawer_menu
 # --- 2. THE DYNAMIC BLOCK ---
 @ui.refreshable
 def code_viewer():
-    ui.code(loaded_program_state.content, language='asm').classes('w-full h-full text-xl')
+    ui.code(loaded_program_state.content, language='asm').classes('w-full h-full text-lg')
 
 # --- 3. THE "STREAM" LOGIC ---
 def sync():
@@ -57,18 +57,18 @@ def content():
         with ui.card().classes('w-1/4 h-full bg-slate-800 border-slate-700'):
             
             # SIDE A: FILE LIST
-            with ui.column().classes('w-full').bind_visibility_from(loaded_program_state, 'ready', backward=lambda x: not x):
-                ui.label('Programas').classes('text-2xl font-bold mb-4')
+            with ui.column().classes('w-full h-full overflow-y-auto flex-none').bind_visibility_from(loaded_program_state, 'ready', backward=lambda x: not x):
+                ui.label('Programas').classes('text-xl font-bold mb-4')
                 for f in FileLoader.list_files(file_source=FileType.INSTRUCTION):
-                    with ui.button(on_click=lambda f=f: load(f)).classes('w-full justify-start text-xl border').props('flat color=white no-caps'):
+                    with ui.button(on_click=lambda f=f: load(f)).classes('flex-none w-full p-5 justify-start text-lg border').props('flat color=white no-caps'):
                         ui.icon('file_open').classes('mr-2')
-                        ui.label(f).classes('text-xl')
+                        ui.label(f).classes('text-lg')
 
             # SIDE B: LOADER
             with ui.column().classes('w-full h-full justify-center items-center gap-4').bind_visibility_from(loaded_program_state, 'ready'):
                 ui.icon('memory', color='white').classes("text-9xl")
-                ui.button('SEND TO FPGA', on_click=lambda: commit_fpga_upload()).classes('bg-blue-600 w-full text-2xl')
-                ui.button('Back', on_click=lambda: setattr(loaded_program_state, 'ready', False)).props('flat').classes('text-xl')
+                ui.button('SEND TO FPGA', on_click=lambda: commit_fpga_upload()).classes('bg-blue-600 w-full text-xl')
+                ui.button('Back', on_click=lambda: setattr(loaded_program_state, 'ready', False)).props('flat').classes('text-lg')
 
         # RIGHT SIDE: EDITOR
         with ui.column().classes('w-3/4 h-full'):

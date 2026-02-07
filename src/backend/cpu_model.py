@@ -436,7 +436,7 @@ class CPUModel:
         elif operation == 0xF: res = 0xFFFFFFFF                            # NOT_USED/DEBUG
 
         res &= 0xFFFFFFFF # Ensure 32-bit result
-
+        print("this is executed and this is the result", res)
         if return_str:
             return f"ALU Result: 0x{res:08X}"
         return res
@@ -452,7 +452,7 @@ class CPUModel:
         val = pc_plus_4 if sel else alu_res
         
         if return_str:
-            source = "PC+4 (Jump Link)" if sel else "ALU Result"
+            source = f"PC+4 (Jump Link):{pc_plus_4:08X}" if sel else "ALU Result"
             return f"RD Data @ EX Output: 0x{val:08X} (Source: {source})"
         return val
 
@@ -753,7 +753,7 @@ class CPUModel:
             # --- Stage 3: EX ---
             "g527":  {"component": "alu_controller", "function": self.alu_ctrl_inst},
             "g1067": {"component": "alu_src_selector", "function": self.alu_src_selector},
-            "g1066": {"component": "alu", "function": self.alu_inst},
+            "g814": {"component": "alu", "function": self.alu_inst},
             "g1068": {"component": "rd_data_ex_selector", "function": self.rd_data_ex_selector},
 
             # --- Stage 4: MEM ---
