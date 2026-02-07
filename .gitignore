@@ -6,6 +6,7 @@
 .Xil/
 .cache/
 vivado_*.backup.*
+/venv
 
 # --- Runtime specific files ---
 dfx_runtime.txt
@@ -32,4 +33,4 @@ hd_visual/
 Thumbs.db
 
 # --- Custom ---
-/computer_system/others/
+/prjc_riscv_fpga
