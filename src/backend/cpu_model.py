@@ -561,7 +561,7 @@ class CPUModel:
         # Mapping the IF/ID data layout: {pc_if, instr_if, pc_plus_4_if}
         data = {
             "pc_if": st.program_counter_if.value,
-            "instr_if": getattr(st.instruction_if, 'mnemonic', 0),
+            "instr_if": repr(st.instruction_if),
             "pc_plus_4_if": st.incremented_program_counter_if.value
         }
         flush_string = "\nWILL BE FLUSHED" if hzrd.control_hazard.value else ""

@@ -12,6 +12,8 @@ import random
 from backend.schemes import PipelineStatus, AtomicMemTransaction, MemoryWriteMask
 
 
+
+
 try:
     with open("svg/risc-v-diagram.svg", 'r', encoding='utf-8') as f:
         svg_content = f.read()
@@ -44,6 +46,8 @@ async def perform_step():
 
     if step_state.pipeline_status.hazard_status.program_ended.value:
         ui.notify("Programa ha terminado. Se reiniciará el estado el próximo paso.", color='green')
+    else:
+        ui.notify("Paso ejecutado. Actualizando estado...", color='blue', position='top-right', timeout=300)
 
     try:
         group_data = cpu_model.return_group_string_dict(pipeline_status)
@@ -215,9 +219,7 @@ def processor_model_svg():
 @ui.refreshable
 def top_bar_info():
     """Refreshes cycle count and the green/yellow badges at the top."""
-    with ui.row().classes('items-center gap-4'):
-        ui.label(f"Ciclo: {step_state.current_step}").classes('text-slate-400 font-mono text-lg')
-        
+    with ui.row().classes('items-center gap-4'):  
         # Register Alert
         if step_state.changed_reg:
             with ui.row().classes('items-center gap-2 bg-slate-900 px-3 py-1 rounded border border-slate-600'):
@@ -229,6 +231,8 @@ def top_bar_info():
              with ui.row().classes('items-center gap-2 bg-slate-900 px-3 py-1 rounded border border-slate-600'):
                 ui.icon('memory').classes('text-blue-400')
                 ui.label(step_state.atomic_mem_transaction.cmpct_str()).classes('text-blue-400 font-mono')
+
+        ui.label(f"Ciclo: {step_state.current_step}").classes('text-slate-400 font-mono text-lg px-2')
 
 # --- MAIN PAGE LAYOUT ---
 

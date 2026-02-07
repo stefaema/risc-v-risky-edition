@@ -59,32 +59,43 @@ def root():
     app.add_static_files('/svg','svg')
     ui.add_head_html('<link rel="stylesheet" href="style/patch.css">')
 
-    # --- 1. Header (Fixed at top) ---
+    # --- 1. Header ---
     with ui.header(elevated=False).classes('bg-black items-center justify-between px-6'):
+        
+        # --- Left Section (Title) ---
         with ui.column().classes('flex-1'):
             ui.label('FPGA RISC-V: CLIENTE').classes('text-xl font-bold tracking-tight')
         
-        with ui.column().classes('flex-1 items-center grow'):
+        # --- Middle Section (Select + Icon) ---
+        with ui.column().classes('flex-1 items-center'):
+            # Group them in a row to keep them together
+            with ui.row().classes('items-center gap-3 no-wrap'):
+                
+                ui.select(
+                    options=list_serial_ports(),
+                    label='Puerto COM UART',
+                    on_change=lambda e: (setattr(app_state, 'port', e.value), drawer_menu.refresh())
+                ).props('dark outlined text-xl').style('width: 300px') # Set a specific width so it doesn't stretch the whole page
 
-            ui.select(
-                options=list_serial_ports(),
-                label='Puerto COM UART',
-                on_change=lambda e: (setattr(app_state, 'port', e.value), drawer_menu.refresh())
-            ).props('dark outlined text-xl').style('width: 100%')
+                # The Info Icon is now right next to the select
+                info_icon = ui.icon('info', color='white', size="xl").classes('cursor-help')
+                
+                @ui.refreshable
+                def state_labels():
+                    ui.label("COM: " + (app_state.port if app_state.port else "No seleccionado")).classes('text-xl text-gray-400 whitespace-nowrap')
+                    ui.label(f'IMEM: {app_state.last_loaded_program}').classes('text-xl text-gray-400 whitespace-nowrap')
+                    ui.label(f'DMEM: {app_state.last_loaded_data}').classes('text-xl text-gray-400 whitespace-nowrap')
+
+                info_icon.on('mouseenter', lambda: state_labels.refresh())
+
+                with info_icon:
+                    with ui.tooltip().classes('p-2 bg-slate-800'):
+                        state_labels()
         
-        @ui.refreshable
-        def state_labels():
-            ui.label("COM: " + (app_state.port if app_state.port else "No seleccionado")).classes('text-xl text-gray-400 whitespace-nowrap')
-            ui.label(f'IMEM: {app_state.last_loaded_program}').classes('text-xl text-gray-400 whitespace-nowrap')
-            ui.label(f'DMEM: {app_state.last_loaded_data}').classes('text-xl text-gray-400 whitespace-nowrap')
-        with ui.column().classes('flex-1 items-end'):
-
-            info_icon = ui.icon('info', color='white', size="xl").classes('cursor-help')
-            info_icon.on('mouseenter', lambda: state_labels.refresh())
-
-            with info_icon:
-                with ui.tooltip().classes('p-2 bg-slate-800'):
-                    state_labels()
+        # --- Right Section (Empty placeholder to keep Middle Section centered) ---
+        # We keep an empty flex-1 column so the Middle column stays perfectly centered
+        with ui.column().classes('flex-1'):
+            pass
 
     # --- 2. Left Drawer ---
     with ui.left_drawer(value=True).classes('bg-slate-800'):
